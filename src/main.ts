@@ -1,11 +1,9 @@
-import { App, Editor, MarkdownView, Modal, Notice, Plugin, WorkspaceLeaf } from 'obsidian';
-import { DEFAULT_SETTINGS, MyPluginSettings, SampleSettingTab } from "./settings";
+import { Plugin, WorkspaceLeaf } from "obsidian";
+import { DEFAULT_SETTINGS, AssistantSettingTab, AssistantSettings } from "./settings";
 import { ExampleView, VIEW_TYPE_EXAMPLE } from 'chatView';
 
-// Remember to rename these classes and interfaces!
-
-export default class MyPlugin extends Plugin {
-	settings: MyPluginSettings;
+export default class ObsidianAssistantPlugin extends Plugin {
+	settings: AssistantSettings;
 
 	async onload() {
 		this.registerView(
@@ -13,10 +11,11 @@ export default class MyPlugin extends Plugin {
 			(leaf) => new ExampleView(leaf)
 		);
 		await this.loadSettings();
+		this.addSettingTab(new AssistantSettingTab(this.app, this));
 
 		// This creates an icon in the left ribbon.
-		this.addRibbonIcon('dice', 'Sample', (evt: MouseEvent) => {
-			this.activateView();
+		this.addRibbonIcon('dice', 'Open assistant view', () => {
+			void this.activateView();
 		});
 	}
 
@@ -24,7 +23,11 @@ export default class MyPlugin extends Plugin {
 	}
 
 	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData() as Partial<MyPluginSettings>);
+		this.settings = Object.assign(
+			{},
+			DEFAULT_SETTINGS,
+			(await this.loadData()) as Partial<AssistantSettings>
+		);
 	}
 
 	async saveSettings() {
@@ -48,7 +51,6 @@ export default class MyPlugin extends Plugin {
 		}
 
 		// "Reveal" the leaf in case it is in a collapsed sidebar
-		workspace.revealLeaf(leaf as WorkspaceLeaf);
+		await workspace.revealLeaf(leaf as WorkspaceLeaf);
 	}
 }
-
