@@ -18,6 +18,10 @@ export type AcpClientOptions = {
     ) => Promise<void> | void;
 };
 
+type PermissionRequestHandler = (
+    params: acp.RequestPermissionRequest
+) => Promise<acp.RequestPermissionResponse>;
+
 export default class AcpClient implements acp.Client {
     private app: App;
     private onRequestPermission?: AcpClientOptions["onRequestPermission"];
@@ -32,6 +36,7 @@ export default class AcpClient implements acp.Client {
     private sessionUpdateHandlers = new Set<
         (params: acp.SessionNotification) => Promise<void> | void
     >();
+    private permissionRequestHandlers = new Set<PermissionRequestHandler>();
 
     constructor(options: AcpClientOptions) {
         this.app = options.app;
@@ -173,20 +178,15 @@ export default class AcpClient implements acp.Client {
             return this.onRequestPermission(params);
         }
 
-        const preferred =
-            params.options.find((option) => option.kind === "allow_once") ??
-            params.options[0];
-
-        if (!preferred) {
-            return { outcome: { outcome: "cancelled" } };
+        for (const handler of this.permissionRequestHandlers) {
+            try {
+                return await handler(params);
+            } catch (error) {
+                console.warn(`Permission request handler error: ${error}`);
+            }
         }
 
-        return {
-            outcome: {
-                outcome: "selected",
-                optionId: preferred.optionId,
-            },
-        };
+        return { outcome: { outcome: "cancelled" } };
     }
 
     async sessionUpdate(params: acp.SessionNotification): Promise<void> {
@@ -209,6 +209,13 @@ export default class AcpClient implements acp.Client {
         this.sessionUpdateHandlers.add(handler);
         return () => {
             this.sessionUpdateHandlers.delete(handler);
+        };
+    }
+
+    subscribePermissionRequests(handler: PermissionRequestHandler): () => void {
+        this.permissionRequestHandlers.add(handler);
+        return () => {
+            this.permissionRequestHandlers.delete(handler);
         };
     }
 

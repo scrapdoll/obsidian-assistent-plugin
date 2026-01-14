@@ -117,6 +117,94 @@ If your plugin does not need CSS, delete this file.
 	font-size: 12px;
 }
 
+.assistant-chat-permission {
+	align-self: stretch;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 12px;
+	border-radius: 12px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+	box-shadow: var(--shadow-s);
+}
+
+.assistant-chat-permission-header {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.assistant-chat-permission-title {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.assistant-chat-permission-meta {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.assistant-chat-permission-id {
+	font-size: 11px;
+	color: var(--text-faint);
+}
+
+.assistant-chat-permission-queue {
+	align-self: flex-start;
+	padding: 4px 8px;
+	border-radius: 999px;
+	background: var(--background-modifier-hover);
+	font-size: 11px;
+	color: var(--text-muted);
+}
+
+.assistant-chat-permission-input {
+	margin: 0;
+	padding: 8px 10px;
+	border-radius: 8px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	font-size: 12px;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.assistant-chat-permission-options {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.assistant-chat-permission-option {
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	padding: 6px 10px;
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	font-size: 12px;
+	cursor: pointer;
+}
+
+.assistant-chat-permission-option.is-allow {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	border-color: var(--interactive-accent);
+}
+
+.assistant-chat-permission-option.is-reject {
+	background: var(--color-red);
+	color: var(--text-on-accent);
+	border-color: var(--color-red);
+}
+
+.assistant-chat-permission-option.is-cancel {
+	background: transparent;
+	color: var(--text-muted);
+}
+
 .assistant-chat-error {
 	align-self: center;
 	font-size: 12px;
