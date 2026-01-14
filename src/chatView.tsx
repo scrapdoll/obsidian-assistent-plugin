@@ -88,7 +88,8 @@ export const ChatView = ({ client }: ChatViewProps) => {
                 const index = prev.findIndex((message) => message.id === activeId);
                 if (index !== -1) {
                     const next = [...prev];
-                    next[index] = { ...prev[index], content: prev[index].content + text };
+                    const target = prev[index]!;
+                    next[index] = { ...target, content: target.content + text };
                     return next;
                 }
             }
