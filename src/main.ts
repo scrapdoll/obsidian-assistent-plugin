@@ -1,9 +1,12 @@
 import { Plugin, WorkspaceLeaf } from "obsidian";
 import { DEFAULT_SETTINGS, AssistantSettingTab, AssistantSettings } from "./settings";
 import { ExampleView, VIEW_TYPE_EXAMPLE } from 'chatView';
+import AcpClient from "acp/client";
 
 export default class ObsidianAssistantPlugin extends Plugin {
 	settings: AssistantSettings;
+
+	private acpClient: AcpClient | null = null;
 
 	async onload() {
 		this.registerView(
@@ -16,7 +19,18 @@ export default class ObsidianAssistantPlugin extends Plugin {
 		// This creates an icon in the left ribbon.
 		this.addRibbonIcon('dice', 'Open assistant view', () => {
 			void this.activateView();
+			this.getOrCreateAcpClient();
+			this.acpClient?.initialize();
 		});
+
+
+		this.registerEvent(this.app.workspace.on("quit", () => {
+			if (this.acpClient) {
+				this.acpClient.disconnect().catch((error) => {
+					console.warn(`Quit cleanup error: ${error}`)
+				});
+			}
+		}))
 	}
 
 	onunload() {
@@ -52,5 +66,13 @@ export default class ObsidianAssistantPlugin extends Plugin {
 
 		// "Reveal" the leaf in case it is in a collapsed sidebar
 		await workspace.revealLeaf(leaf as WorkspaceLeaf);
+	}
+
+	getOrCreateAcpClient(): AcpClient {
+		if (!this.acpClient) {
+			this.acpClient = new AcpClient(this);
+		}
+
+		return this.acpClient;
 	}
 }
