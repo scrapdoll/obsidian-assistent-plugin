@@ -1,6 +1,14 @@
 import type { KeyboardEvent } from "react";
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ContentBlock, SessionNotification, ToolCall, ToolCallUpdate } from "@agentclientprotocol/sdk";
+import type {
+    ContentBlock,
+    PermissionOption,
+    RequestPermissionRequest,
+    RequestPermissionResponse,
+    SessionNotification,
+    ToolCall,
+    ToolCallUpdate
+} from "@agentclientprotocol/sdk";
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import { createRoot, Root } from "react-dom/client";
 import AcpClient from "acp/client";
@@ -15,6 +23,12 @@ type ChatMessage = {
     content: string;
 };
 
+type PermissionRequestState = {
+    id: string;
+    request: RequestPermissionRequest;
+    resolve: (response: RequestPermissionResponse) => void;
+};
+
 type ChatViewProps = {
     client: AcpClient;
 };
@@ -22,9 +36,61 @@ type ChatViewProps = {
 const createMessageId = (prefix: string) =>
     `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
 
+const formatErrorDetails = (data: unknown) => {
+    if (data == null) {
+        return "";
+    }
+
+    if (typeof data === "string") {
+        return ` (${data})`;
+    }
+
+    try {
+        const text = JSON.stringify(data);
+        if (text.length > 300) {
+            return ` (${text.slice(0, 300)}...)`;
+        }
+        return ` (${text})`;
+    } catch (error) {
+        return "";
+    }
+};
+
+const isPromptParamError = (error: unknown) => {
+    let current: unknown = error;
+
+    while (current && typeof current === "object") {
+        const message = (current as { message?: unknown }).message;
+        if (typeof message === "string" && message.includes("prompt parameter")) {
+            return true;
+        }
+        const data = (current as { data?: unknown }).data;
+        current = (data as { error?: unknown } | undefined)?.error;
+    }
+
+    return false;
+};
+
 const formatError = (error: unknown) => {
     if (error instanceof Error) {
-        return error.message;
+        const maybeCode = (error as { code?: unknown }).code;
+        const maybeData = (error as { data?: unknown }).data;
+        const codeLabel =
+            typeof maybeCode === "string" || typeof maybeCode === "number"
+                ? ` [code ${maybeCode}]`
+                : "";
+        return `${error.message}${codeLabel}${formatErrorDetails(maybeData)}`;
+    }
+
+    if (error && typeof error === "object") {
+        const maybeError = error as { message?: unknown; code?: unknown; data?: unknown };
+        if (typeof maybeError.message === "string") {
+            const codeLabel =
+                typeof maybeError.code === "string" || typeof maybeError.code === "number"
+                    ? ` [code ${maybeError.code}]`
+                    : "";
+            return `${maybeError.message}${codeLabel}${formatErrorDetails(maybeError.data)}`;
+        }
     }
 
     return String(error);
@@ -56,15 +122,59 @@ const describeToolCall = (prefix: string, toolCall: ToolCall | ToolCallUpdate) =
     return `${prefix}: ${title}${status}`;
 };
 
+const formatPermissionTitle = (request: RequestPermissionRequest) => {
+    const title = request.toolCall.title ?? `Tool ${request.toolCall.toolCallId}`;
+    const kind = request.toolCall.kind ? request.toolCall.kind.replace(/_/g, " ") : "other";
+    return `${title} - ${kind}`;
+};
+
+const formatPermissionInput = (input: unknown): string | null => {
+    if (input == null) {
+        return null;
+    }
+
+    if (typeof input === "string") {
+        return input;
+    }
+
+    if (typeof input === "number" || typeof input === "boolean") {
+        return String(input);
+    }
+
+    try {
+        const text = JSON.stringify(input, null, 2);
+        if (text.length > 1200) {
+            return `${text.slice(0, 1200)}...`;
+        }
+        return text;
+    } catch (error) {
+        return String(input);
+    }
+};
+
+const getPermissionOptionTone = (option: PermissionOption) => {
+    if (option.kind === "allow_once" || option.kind === "allow_always") {
+        return "allow";
+    }
+
+    if (option.kind === "reject_once" || option.kind === "reject_always") {
+        return "reject";
+    }
+
+    return "neutral";
+};
+
 export const ChatView = ({ client }: ChatViewProps) => {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
     const [status, setStatus] = useState<"connecting" | "ready" | "error">("connecting");
     const [isSending, setIsSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [permissionQueue, setPermissionQueue] = useState<PermissionRequestState[]>([]);
     const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
     const activeAssistantIdRef = useRef<string | null>(null);
     const inputRef = useRef<HTMLTextAreaElement | null>(null);
+    const permissionQueueRef = useRef<PermissionRequestState[]>([]);
 
     const appendMessage = useCallback((role: ChatMessageRole, content: string) => {
         setMessages((prev) => [
@@ -193,8 +303,77 @@ export const ChatView = ({ client }: ChatViewProps) => {
     }, [appendAssistantText, appendMessage, client]);
 
     useEffect(() => {
+        permissionQueueRef.current = permissionQueue;
+    }, [permissionQueue]);
+
+    const enqueuePermissionRequest = useCallback((entry: PermissionRequestState) => {
+        setPermissionQueue((prev) => {
+            const next = [...prev, entry];
+            permissionQueueRef.current = next;
+            return next;
+        });
+    }, []);
+
+    useEffect(() => {
+        const unsubscribe = client.subscribePermissionRequests((request) => {
+            return new Promise<RequestPermissionResponse>((resolve) => {
+                const entry: PermissionRequestState = {
+                    id: createMessageId("permission"),
+                    request,
+                    resolve
+                };
+                enqueuePermissionRequest(entry);
+            });
+        });
+
+        return () => {
+            unsubscribe();
+            for (const pending of permissionQueueRef.current) {
+                pending.resolve({ outcome: { outcome: "cancelled" } });
+            }
+            permissionQueueRef.current = [];
+        };
+    }, [client, enqueuePermissionRequest]);
+
+    useEffect(() => {
         scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    }, [messages, isSending]);
+    }, [messages, isSending, permissionQueue.length]);
+
+    const resolvePermissionRequest = useCallback(
+        (outcome: RequestPermissionResponse["outcome"]) => {
+            setPermissionQueue((prev) => {
+                const current = prev[0];
+                if (!current) {
+                    return prev;
+                }
+
+                const rest = prev.slice(1);
+                current.resolve({ outcome });
+                permissionQueueRef.current = rest;
+                return rest;
+            });
+        },
+        []
+    );
+
+    const handlePermissionSelect = useCallback(
+        (option: PermissionOption) => {
+            resolvePermissionRequest({ outcome: "selected", optionId: option.optionId });
+            appendMessage("system", `Permission selected: ${option.name}`);
+        },
+        [appendMessage, resolvePermissionRequest]
+    );
+
+    const handlePermissionCancel = useCallback(() => {
+        resolvePermissionRequest({ outcome: "cancelled" });
+        appendMessage("system", "Permission request cancelled.");
+    }, [appendMessage, resolvePermissionRequest]);
+
+    const activePermission = permissionQueue[0] ?? null;
+    const pendingPermissionCount = Math.max(permissionQueue.length - 1, 0);
+    const activePermissionInput = activePermission
+        ? formatPermissionInput(activePermission.request.toolCall.rawInput)
+        : null;
 
     const handleSend = async () => {
         const trimmed = input.trim();
@@ -202,7 +381,6 @@ export const ChatView = ({ client }: ChatViewProps) => {
             return;
         }
 
-        setInput("");
         setError(null);
         activeAssistantIdRef.current = null;
         appendMessage("user", trimmed);
@@ -210,8 +388,13 @@ export const ChatView = ({ client }: ChatViewProps) => {
 
         try {
             await client.sendPrompt(trimmed);
+            setInput("");
         } catch (err) {
+            setInput(trimmed);
             const message = formatError(err);
+            if (isPromptParamError(err)) {
+                console.warn("Prompt parameter error", err);
+            }
             setError(message);
             appendMessage("system", `Prompt error: ${message}`);
         } finally {
@@ -281,6 +464,57 @@ export const ChatView = ({ client }: ChatViewProps) => {
                         {message.content}
                     </div>
                 ))}
+                {activePermission ? (
+                    <div className="assistant-chat-permission">
+                        <div className="assistant-chat-permission-header">
+                            <div>
+                                <div className="assistant-chat-permission-title">
+                                    Permission required
+                                </div>
+                                <div className="assistant-chat-permission-meta">
+                                    {formatPermissionTitle(activePermission.request)}
+                                </div>
+                                <div className="assistant-chat-permission-id">
+                                    Tool call ID: {activePermission.request.toolCall.toolCallId}
+                                </div>
+                            </div>
+                            {pendingPermissionCount > 0 ? (
+                                <div className="assistant-chat-permission-queue">
+                                    {pendingPermissionCount} more pending
+                                </div>
+                            ) : null}
+                        </div>
+                        {activePermissionInput ? (
+                            <pre className="assistant-chat-permission-input">
+                                {activePermissionInput}
+                            </pre>
+                        ) : null}
+                        <div className="assistant-chat-permission-options">
+                            {activePermission.request.options.map((option) => {
+                                const tone = getPermissionOptionTone(option);
+                                const toneClass =
+                                    tone === "neutral" ? "" : ` is-${tone}`;
+                                return (
+                                    <button
+                                        key={option.optionId}
+                                        className={`assistant-chat-permission-option${toneClass}`}
+                                        type="button"
+                                        onClick={() => handlePermissionSelect(option)}
+                                    >
+                                        {option.name}
+                                    </button>
+                                );
+                            })}
+                            <button
+                                className="assistant-chat-permission-option is-cancel"
+                                type="button"
+                                onClick={handlePermissionCancel}
+                            >
+                                Cancel request
+                            </button>
+                        </div>
+                    </div>
+                ) : null}
                 {error ? <div className="assistant-chat-error">{error}</div> : null}
                 <div ref={scrollAnchorRef} />
             </div>
