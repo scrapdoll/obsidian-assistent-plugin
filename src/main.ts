@@ -1,6 +1,6 @@
 import { Plugin, WorkspaceLeaf } from "obsidian";
 import { DEFAULT_SETTINGS, AssistantSettingTab, AssistantSettings } from "./settings";
-import { AssistentChatView, VIEW_TYPE_EXAMPLE } from 'chatView';
+import { AssistantChatView, VIEW_TYPE_EXAMPLE } from "chatView";
 import AcpClient from "acp/client";
 
 export default class ObsidianAssistantPlugin extends Plugin {
@@ -11,7 +11,7 @@ export default class ObsidianAssistantPlugin extends Plugin {
 	async onload() {
 		this.registerView(
 			VIEW_TYPE_EXAMPLE,
-			(leaf) => new AssistentChatView(leaf, () => this.getOrCreateAcpClient())
+			(leaf) => new AssistantChatView(leaf, () => this.getOrCreateAcpClient())
 		);
 		await this.loadSettings();
 		this.addSettingTab(new AssistantSettingTab(this.app, this));

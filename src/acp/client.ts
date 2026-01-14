@@ -237,12 +237,7 @@ export default class AcpClient implements acp.Client {
 
     async sendPrompt(text: string): Promise<acp.PromptResponse> {
         const sessionId = await this.ensureSession();
-        const connection = this.connection;
-        if (!connection) {
-            throw new Error("ACP connection unavailable.");
-        }
-
-        return connection.prompt({
+        return this.connection!.prompt({
             sessionId,
             prompt: [
                 {
@@ -255,12 +250,7 @@ export default class AcpClient implements acp.Client {
 
     async cancelPrompt(): Promise<void> {
         const sessionId = await this.ensureSession();
-        const connection = this.connection;
-        if (!connection) {
-            throw new Error("ACP connection unavailable.");
-        }
-
-        await connection.cancel({ sessionId });
+        await this.connection!.cancel({ sessionId });
     }
 
     async writeTextFile(

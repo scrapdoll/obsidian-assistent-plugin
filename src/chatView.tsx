@@ -87,13 +87,8 @@ export const ChatView = ({ client }: ChatViewProps) => {
             if (activeId) {
                 const index = prev.findIndex((message) => message.id === activeId);
                 if (index !== -1) {
-                    const target = prev[index];
-                    if (!target) {
-                        return prev;
-                    }
-
                     const next = [...prev];
-                    next[index] = { ...target, content: target.content + text };
+                    next[index] = { ...prev[index], content: prev[index].content + text };
                     return next;
                 }
             }
@@ -316,7 +311,7 @@ export const ChatView = ({ client }: ChatViewProps) => {
     );
 };
 
-export class AssistentChatView extends ItemView {
+export class AssistantChatView extends ItemView {
     root: Root | null = null;
     private clientProvider: () => AcpClient;
 
