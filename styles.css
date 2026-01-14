@@ -6,3 +6,167 @@ available in the app when your plugin is enabled.
 If your plugin does not need CSS, delete this file.
 
 */
+
+.assistant-chat-view,
+.assistant-chat-root {
+	height: 100%;
+	width: 100%;
+}
+
+.assistant-chat-root {
+	display: flex;
+	flex-direction: column;
+	background: var(--background-primary);
+}
+
+.assistant-chat-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 12px 16px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.assistant-chat-title {
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--text-normal);
+}
+
+.assistant-chat-subtitle {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.assistant-chat-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+
+.assistant-chat-status-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--text-muted);
+}
+
+.assistant-chat-status.is-ready .assistant-chat-status-dot {
+	background: var(--color-green);
+}
+
+.assistant-chat-status.is-busy .assistant-chat-status-dot {
+	background: var(--color-yellow);
+}
+
+.assistant-chat-status.is-connecting .assistant-chat-status-dot {
+	background: var(--color-blue);
+}
+
+.assistant-chat-status.is-error .assistant-chat-status-dot {
+	background: var(--color-red);
+}
+
+.assistant-chat-messages {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px;
+	overflow: auto;
+	background: var(--background-secondary);
+}
+
+.assistant-chat-empty {
+	font-size: 13px;
+	color: var(--text-muted);
+	text-align: center;
+	margin-top: 24px;
+}
+
+.assistant-chat-message {
+	max-width: 88%;
+	padding: 10px 12px;
+	border-radius: 12px;
+	line-height: 1.45;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.assistant-chat-message.user {
+	align-self: flex-end;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+}
+
+.assistant-chat-message.assistant {
+	align-self: flex-start;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	border: 1px solid var(--background-modifier-border);
+	box-shadow: var(--shadow-s);
+}
+
+.assistant-chat-message.system {
+	align-self: center;
+	background: var(--background-modifier-hover);
+	color: var(--text-muted);
+	font-size: 12px;
+}
+
+.assistant-chat-error {
+	align-self: center;
+	font-size: 12px;
+	color: var(--text-error);
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	padding: 6px 10px;
+	border-radius: 999px;
+}
+
+.assistant-chat-input {
+	display: flex;
+	align-items: flex-end;
+	gap: 12px;
+	padding: 12px 16px;
+	border-top: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+}
+
+.assistant-chat-textarea {
+	flex: 1;
+	min-height: 36px;
+	max-height: 160px;
+	padding: 8px 10px;
+	border-radius: 8px;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	font-size: 13px;
+	resize: vertical;
+}
+
+.assistant-chat-textarea:focus {
+	outline: none;
+	border-color: var(--interactive-accent);
+	box-shadow: 0 0 0 2px var(--background-modifier-border-focus);
+}
+
+.assistant-chat-send {
+	border: none;
+	border-radius: 8px;
+	padding: 8px 14px;
+	font-size: 13px;
+	font-weight: 600;
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	cursor: pointer;
+}
+
+.assistant-chat-send:disabled {
+	cursor: not-allowed;
+	opacity: 0.6;
+}

@@ -26,6 +26,12 @@ export default class AcpClient implements acp.Client {
     private onExtNotification?: AcpClientOptions["onExtNotification"];
     private connection: acp.ClientSideConnection | null = null;
     private agentProcess: ChildProcess | null = null;
+    private initializationPromise: Promise<acp.InitializeResponse> | null = null;
+    private sessionPromise: Promise<acp.NewSessionResponse> | null = null;
+    private sessionId: acp.SessionId | null = null;
+    private sessionUpdateHandlers = new Set<
+        (params: acp.SessionNotification) => Promise<void> | void
+    >();
 
     constructor(options: AcpClientOptions) {
         this.app = options.app;
@@ -35,75 +41,106 @@ export default class AcpClient implements acp.Client {
         this.onExtNotification = options.onExtNotification;
     }
 
-    initialize() {
-        let shell = ""
-
-        if (Platform.isLinux || Platform.isMacOS) {
-            shell = Platform.isMacOS ? "/bin/zsh" : "/bin/bash"
+    private resetConnectionState(agentProcess?: ChildProcess) {
+        if (agentProcess && this.agentProcess && agentProcess !== this.agentProcess) {
+            return;
         }
 
-        const spawnCommand = shell;
-        const spawnArgs = ["claude-code-acp"]
-        const agentProcess = spawn(spawnCommand, spawnArgs, {
-            stdio: ["pipe", "pipe", "pipe"]
-        })
+        this.agentProcess = null;
+        this.connection = null;
+        this.initializationPromise = null;
+        this.sessionPromise = null;
+        this.sessionId = null;
+    }
 
-        agentProcess.on("spawn", () => {
-            console.log(`process spawned successfully, PDI: ${agentProcess.pid}`)
-        })
+    async initialize(): Promise<acp.InitializeResponse> {
+        if (this.initializationPromise) {
+            return this.initializationPromise;
+        }
 
-        agentProcess.on("error", (error) => {
-            console.log(`process error: ${error}`)
-        })
+        if (!this.connection) {
+            let shell = "";
 
-        agentProcess.on("exit", (code, signal) => {
-            console.log(`process exit with code: ${code} signal: ${signal}`)
-        })
-
-        const stdin = agentProcess.stdin;
-        const stdout = agentProcess.stdout;
-
-        const input = new WritableStream<Uint8Array>({
-            write(chunk) {
-                stdin.write(chunk);
-            },
-            close() {
-                stdin.end();
+            if (Platform.isLinux || Platform.isMacOS) {
+                shell = Platform.isMacOS ? "/bin/zsh" : "/bin/bash";
             }
-        })
 
-        const output = new ReadableStream<Uint8Array>({
-            start(contoller) {
-                stdout.on("data", (chunk: Uint8Array) => {
-                    contoller.enqueue(chunk);
-                })
-                stdout.on("end", () => {
-                    contoller.close();
-                })
+            const spawnCommand = shell || "claude-code-acp";
+            const spawnArgs = shell ? ["-lc", "claude-code-acp"] : [];
+            const agentProcess = spawn(spawnCommand, spawnArgs, {
+                stdio: ["pipe", "pipe", "pipe"]
+            });
+
+            this.agentProcess = agentProcess;
+
+            agentProcess.on("spawn", () => {
+                console.log(`process spawned successfully, PDI: ${agentProcess.pid}`);
+            });
+
+            agentProcess.on("error", (error) => {
+                console.log(`process error: ${error}`);
+                this.resetConnectionState(agentProcess);
+            });
+
+            agentProcess.on("exit", (code, signal) => {
+                console.log(`process exit with code: ${code} signal: ${signal}`);
+                this.resetConnectionState(agentProcess);
+            });
+
+            const stdin = agentProcess.stdin;
+            const stdout = agentProcess.stdout;
+
+            if (!stdin || !stdout) {
+                throw new Error("ACP process missing stdio streams.");
             }
-        })
 
-        const stream = acp.ndJsonStream(input, output);
-
-        this.connection = new acp.ClientSideConnection(() => this, stream);
-
-        try {
-            const initResult = this.connection.initialize({
-                protocolVersion: acp.PROTOCOL_VERSION,
-                clientCapabilities: {
-                    fs: {
-                        readTextFile: true,
-                        writeTextFile: true
-                    }
+            const input = new WritableStream<Uint8Array>({
+                write(chunk) {
+                    stdin.write(chunk);
+                },
+                close() {
+                    stdin.end();
                 }
             });
-        } catch (err) {
-            throw err;
+
+            const output = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    stdout.on("data", (chunk: Uint8Array) => {
+                        controller.enqueue(chunk);
+                    });
+                    stdout.on("end", () => {
+                        controller.close();
+                    });
+                }
+            });
+
+            const stream = acp.ndJsonStream(input, output);
+
+            this.connection = new acp.ClientSideConnection(() => this, stream);
         }
+
+        const connection = this.connection;
+        if (!connection) {
+            throw new Error("ACP connection unavailable.");
+        }
+
+        this.initializationPromise = connection.initialize({
+            protocolVersion: acp.PROTOCOL_VERSION,
+            clientCapabilities: {
+                fs: {
+                    readTextFile: true,
+                    writeTextFile: true
+                }
+            }
+        });
+        this.initializationPromise.catch(() => {
+            this.initializationPromise = null;
+        });
+
+        return this.initializationPromise;
     }
 
     disconnect(): Promise<void> {
-
         if (this.agentProcess) {
             if (this.agentProcess.stdin) {
                 this.agentProcess.stdin.end();
@@ -119,12 +156,12 @@ export default class AcpClient implements acp.Client {
 
             this.agentProcess.once("close", () => {
                 clearTimeout(timeout);
-            })
+            });
 
-            this.agentProcess = null
+            this.agentProcess = null;
         }
 
-        this.connection = null;
+        this.resetConnectionState();
 
         return Promise.resolve();
     }
@@ -153,9 +190,78 @@ export default class AcpClient implements acp.Client {
     }
 
     async sessionUpdate(params: acp.SessionNotification): Promise<void> {
+        for (const handler of this.sessionUpdateHandlers) {
+            try {
+                await handler(params);
+            } catch (error) {
+                console.warn(`Session update handler error: ${error}`);
+            }
+        }
+
         if (this.onSessionUpdate) {
             await this.onSessionUpdate(params);
         }
+    }
+
+    subscribeSessionUpdates(
+        handler: (params: acp.SessionNotification) => Promise<void> | void
+    ): () => void {
+        this.sessionUpdateHandlers.add(handler);
+        return () => {
+            this.sessionUpdateHandlers.delete(handler);
+        };
+    }
+
+    async ensureSession(): Promise<acp.SessionId> {
+        await this.initialize();
+
+        if (this.sessionId) {
+            return this.sessionId;
+        }
+
+        const connection = this.connection;
+        if (!connection) {
+            throw new Error("ACP connection unavailable.");
+        }
+
+        if (!this.sessionPromise) {
+            const cwd = this.getVaultBasePath();
+            if (!cwd) {
+                throw new Error("Vault path is unavailable.");
+            }
+
+            this.sessionPromise = connection.newSession({
+                cwd,
+                mcpServers: []
+            });
+        }
+
+        try {
+            const response = await this.sessionPromise;
+            this.sessionId = response.sessionId;
+            return response.sessionId;
+        } catch (error) {
+            this.sessionPromise = null;
+            throw error;
+        }
+    }
+
+    async sendPrompt(text: string): Promise<acp.PromptResponse> {
+        const sessionId = await this.ensureSession();
+        return this.connection!.prompt({
+            sessionId,
+            prompt: [
+                {
+                    type: "text",
+                    text
+                }
+            ]
+        });
+    }
+
+    async cancelPrompt(): Promise<void> {
+        const sessionId = await this.ensureSession();
+        await this.connection!.cancel({ sessionId });
     }
 
     async writeTextFile(
