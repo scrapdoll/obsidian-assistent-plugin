@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import type { DragEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 import { StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
     ContentBlock,
@@ -9,7 +9,15 @@ import type {
     ToolCall,
     ToolCallUpdate
 } from "@agentclientprotocol/sdk";
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import {
+    App,
+    FileSystemAdapter,
+    FuzzySuggestModal,
+    ItemView,
+    TFile,
+    WorkspaceLeaf,
+    normalizePath
+} from "obsidian";
 import { createRoot, Root } from "react-dom/client";
 import AcpClient from "acp/client";
 
@@ -23,6 +31,19 @@ type ChatMessage = {
     content: string;
 };
 
+type AttachmentSource = "auto" | "manual";
+
+type Attachment = {
+    id: string;
+    path: string;
+    name: string;
+    size: number;
+    kind: "text" | "binary";
+    mode: "inline" | "reference";
+    content?: string;
+    source: AttachmentSource;
+};
+
 type PermissionRequestState = {
     id: string;
     request: RequestPermissionRequest;
@@ -31,7 +52,49 @@ type PermissionRequestState = {
 
 type ChatViewProps = {
     client: AcpClient;
+    app: App;
 };
+
+const INLINE_ATTACHMENT_LIMIT = 300 * 1024;
+
+const TEXT_EXTENSIONS = new Set([
+    "md",
+    "mdx",
+    "txt",
+    "json",
+    "yaml",
+    "yml",
+    "toml",
+    "ini",
+    "conf",
+    "log",
+    "csv",
+    "ts",
+    "tsx",
+    "js",
+    "jsx",
+    "mjs",
+    "cjs",
+    "css",
+    "scss",
+    "html",
+    "xml",
+    "sh",
+    "py",
+    "rb",
+    "go",
+    "rs",
+    "java",
+    "kt",
+    "swift",
+    "c",
+    "cpp",
+    "h",
+    "hpp",
+    "cs",
+    "php",
+    "sql"
+]);
 
 const createMessageId = (prefix: string) =>
     `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -150,6 +213,107 @@ const formatError = (error: unknown) => {
     return String(error);
 };
 
+const normalizeSlashes = (value: string) => value.replace(/\\/g, "/");
+
+const getVaultBasePath = (app: App): string | null => {
+    const adapter = app.vault.adapter;
+    if (adapter instanceof FileSystemAdapter) {
+        return normalizeSlashes(adapter.getBasePath());
+    }
+
+    return null;
+};
+
+const toVaultRelativePath = (app: App, inputPath: string): string | null => {
+    const normalized = normalizeSlashes(inputPath);
+    const basePath = getVaultBasePath(app);
+
+    if (basePath) {
+        const trimmedBase = basePath.replace(/\/+$/, "");
+        if (normalized === trimmedBase) {
+            return "";
+        }
+        if (normalized.startsWith(`${trimmedBase}/`)) {
+            return normalizePath(normalized.slice(trimmedBase.length + 1));
+        }
+    }
+
+    if (!normalized.startsWith("/")) {
+        return normalizePath(normalized.replace(/^\/+/, ""));
+    }
+
+    return null;
+};
+
+const toVaultUri = (path: string) => `vault:///${encodeURI(path)}`;
+
+const formatBytes = (bytes: number) => {
+    if (!Number.isFinite(bytes)) {
+        return "";
+    }
+
+    const units = ["B", "KB", "MB", "GB"];
+    let value = bytes;
+    let index = 0;
+    while (value >= 1024 && index < units.length - 1) {
+        value /= 1024;
+        index += 1;
+    }
+
+    const decimals = value >= 10 || index === 0 ? 0 : 1;
+    return `${value.toFixed(decimals)} ${units[index]}`;
+};
+
+const resolveObsidianOpenUrl = (app: App, candidate: string): TFile | null => {
+    let url: URL;
+    try {
+        url = new URL(candidate);
+    } catch {
+        return null;
+    }
+
+    if (url.protocol !== "obsidian:" || url.hostname !== "open") {
+        return null;
+    }
+
+    const vaultName = url.searchParams.get("vault");
+    if (vaultName && vaultName !== app.vault.getName()) {
+        return null;
+    }
+
+    const fileParam = url.searchParams.get("file");
+    if (!fileParam) {
+        return null;
+    }
+
+    const decoded = decodeURIComponent(fileParam);
+    const normalized = normalizePath(decoded);
+
+    const exact = app.vault.getFileByPath(normalized);
+    if (exact) {
+        return exact;
+    }
+
+    const resolved = app.metadataCache.getFirstLinkpathDest(decoded, "");
+    if (resolved) {
+        return resolved;
+    }
+
+    if (!normalized.endsWith(".md")) {
+        return app.vault.getFileByPath(`${normalized}.md`);
+    }
+
+    return null;
+};
+
+const isTextFile = (file: TFile) => {
+    const ext = file.extension.toLowerCase();
+    if (!ext) {
+        return true;
+    }
+    return TEXT_EXTENSIONS.has(ext);
+};
+
 const contentToText = (content: ContentBlock): string => {
     if (content.type === "text") {
         return content.text;
@@ -218,17 +382,21 @@ const getPermissionOptionTone = (option: PermissionOption) => {
     return "neutral";
 };
 
-export const ChatView = ({ client }: ChatViewProps) => {
+export const ChatView = ({ client, app }: ChatViewProps) => {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [input, setInput] = useState("");
     const [status, setStatus] = useState<"connecting" | "ready" | "error">("connecting");
     const [isSending, setIsSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [permissionQueue, setPermissionQueue] = useState<PermissionRequestState[]>([]);
+    const [attachments, setAttachments] = useState<Attachment[]>([]);
+    const [isDragActive, setIsDragActive] = useState(false);
     const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
     const activeAssistantIdRef = useRef<string | null>(null);
     const inputRef = useRef<HTMLTextAreaElement | null>(null);
     const permissionQueueRef = useRef<PermissionRequestState[]>([]);
+    const attachmentsRef = useRef<Attachment[]>([]);
+    const autoAttachSuppressedRef = useRef(false);
 
     const appendMessage = useCallback((role: ChatMessageRole, content: string) => {
         setMessages((prev) => [
@@ -265,6 +433,240 @@ export const ChatView = ({ client }: ChatViewProps) => {
     }, []);
 
     useEffect(() => {
+        attachmentsRef.current = attachments;
+    }, [attachments]);
+
+    const buildAttachment = useCallback(
+        async (file: TFile, source: AttachmentSource): Promise<Attachment> => {
+            const size = file.stat.size;
+            const textFile = isTextFile(file);
+            let mode: Attachment["mode"] =
+                textFile && size <= INLINE_ATTACHMENT_LIMIT ? "inline" : "reference";
+            let content: string | undefined;
+
+            if (mode === "inline") {
+                try {
+                    content = await app.vault.read(file);
+                } catch (error) {
+                    mode = "reference";
+                    appendMessage(
+                        "system",
+                        `Attachment read failed for ${file.path}: ${formatError(error)}`
+                    );
+                }
+            }
+
+            return {
+                id: createMessageId("attachment"),
+                path: file.path,
+                name: file.name,
+                size,
+                kind: textFile ? "text" : "binary",
+                mode,
+                content,
+                source
+            };
+        },
+        [app, appendMessage]
+    );
+
+    const addAttachmentFromFile = useCallback(
+        async (file: TFile, source: AttachmentSource) => {
+            if (attachmentsRef.current.some((attachment) => attachment.path === file.path)) {
+                return;
+            }
+
+            const attachment = await buildAttachment(file, source);
+            setAttachments((prev) => {
+                if (prev.some((item) => item.path === attachment.path)) {
+                    return prev;
+                }
+                return [...prev, attachment];
+            });
+        },
+        [buildAttachment]
+    );
+
+    const resolveDropPath = useCallback(
+        (candidate: string): TFile | null => {
+            if (candidate.startsWith("obsidian://")) {
+                return resolveObsidianOpenUrl(app, candidate);
+            }
+
+            const relativePath = toVaultRelativePath(app, candidate);
+            if (!relativePath) {
+                return null;
+            }
+
+            const file = app.vault.getAbstractFileByPath(relativePath);
+            return file instanceof TFile ? file : null;
+        },
+        [app]
+    );
+
+    const addAttachmentsFromPaths = useCallback(
+        async (paths: string[]) => {
+            for (const path of paths) {
+                const file = resolveDropPath(path);
+                if (!file) {
+                    appendMessage("system", `Skipped non-vault file: ${path}`);
+                    continue;
+                }
+                await addAttachmentFromFile(file, "manual");
+            }
+        },
+        [addAttachmentFromFile, appendMessage, resolveDropPath]
+    );
+
+    const extractDropPaths = (data: DataTransfer) => {
+        const paths: string[] = [];
+
+        for (const file of Array.from(data.files)) {
+            const filePath = (file as { path?: string }).path;
+            if (filePath) {
+                paths.push(filePath);
+            }
+        }
+
+        const text = data.getData("text/plain");
+        if (text) {
+            for (const line of text.split(/\r?\n/)) {
+                const trimmed = line.trim();
+                if (trimmed) {
+                    paths.push(trimmed);
+                }
+            }
+        }
+
+        const uriList = data.getData("text/uri-list");
+        if (uriList) {
+            for (const line of uriList.split(/\r?\n/)) {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.startsWith("#")) {
+                    continue;
+                }
+                if (trimmed.startsWith("file://")) {
+                    paths.push(decodeURI(trimmed.replace("file://", "")));
+                } else {
+                    paths.push(trimmed);
+                }
+            }
+        }
+
+        return Array.from(new Set(paths));
+    };
+
+    const ensureAutoAttachment = useCallback(async () => {
+        if (autoAttachSuppressedRef.current) {
+            return;
+        }
+
+        const file = app.workspace.getActiveFile();
+        if (!file) {
+            setAttachments((prev) => prev.filter((item) => item.source !== "auto"));
+            return;
+        }
+
+        const existingAuto = attachmentsRef.current.find(
+            (attachment) => attachment.source === "auto"
+        );
+        const hasManualForActive = attachmentsRef.current.some(
+            (attachment) =>
+                attachment.source !== "auto" && attachment.path === file.path
+        );
+        if (existingAuto?.path === file.path) {
+            return;
+        }
+        if (hasManualForActive) {
+            if (existingAuto) {
+                setAttachments((prev) => prev.filter((item) => item.source !== "auto"));
+            }
+            return;
+        }
+
+        const attachment = await buildAttachment(file, "auto");
+        setAttachments((prev) => {
+            const withoutAuto = prev.filter((item) => item.source !== "auto");
+            if (withoutAuto.some((item) => item.path === attachment.path)) {
+                return withoutAuto;
+            }
+            return [...withoutAuto, attachment];
+        });
+    }, [app, buildAttachment]);
+
+    const buildPromptBlocks = useCallback(
+        async (text: string, currentAttachments: Attachment[]) => {
+            const blocks: ContentBlock[] = [];
+            const trimmed = text.trim();
+
+            if (trimmed) {
+                blocks.push({ type: "text", text: trimmed });
+            } else if (currentAttachments.length > 0) {
+                blocks.push({ type: "text", text: "Attached files." });
+            }
+
+            for (const attachment of currentAttachments) {
+                const uri = toVaultUri(attachment.path);
+
+                if (attachment.mode === "inline") {
+                    let content = attachment.content;
+                    if (content == null) {
+                        const file = app.vault.getAbstractFileByPath(attachment.path);
+                        if (file instanceof TFile) {
+                            try {
+                                content = await app.vault.read(file);
+                            } catch (error) {
+                                appendMessage(
+                                    "system",
+                                    `Attachment read failed for ${attachment.path}: ${formatError(
+                                        error
+                                    )}`
+                                );
+                                blocks.push({
+                                    type: "resource_link",
+                                    uri,
+                                    name: attachment.name,
+                                    title: attachment.path
+                                });
+                                continue;
+                            }
+                        }
+                    }
+
+                    if (content == null) {
+                        blocks.push({
+                            type: "resource_link",
+                            uri,
+                            name: attachment.name,
+                            title: attachment.path
+                        });
+                        continue;
+                    }
+
+                    blocks.push({
+                        type: "resource",
+                        resource: {
+                            uri,
+                            text: content
+                        }
+                    });
+                    continue;
+                }
+
+                blocks.push({
+                    type: "resource_link",
+                    uri,
+                    name: attachment.name,
+                    title: attachment.path
+                });
+            }
+
+            return blocks;
+        },
+        [app, appendMessage]
+    );
+
+    useEffect(() => {
         let isActive = true;
 
         const init = async () => {
@@ -294,6 +696,17 @@ export const ChatView = ({ client }: ChatViewProps) => {
             isActive = false;
         };
     }, [appendMessage, client]);
+
+    useEffect(() => {
+        void ensureAutoAttachment();
+        const ref = app.workspace.on("file-open", () => {
+            void ensureAutoAttachment();
+        });
+
+        return () => {
+            app.workspace.offref(ref);
+        };
+    }, [app, ensureAutoAttachment]);
 
     useEffect(() => {
         const handleSessionUpdate = (notification: SessionNotification) => {
@@ -423,6 +836,54 @@ export const ChatView = ({ client }: ChatViewProps) => {
         appendMessage("system", "Permission request cancelled.");
     }, [appendMessage, resolvePermissionRequest]);
 
+    const handleAttachmentRemove = useCallback((id: string) => {
+        setAttachments((prev) => {
+            const target = prev.find((attachment) => attachment.id === id);
+            if (target?.source === "auto") {
+                autoAttachSuppressedRef.current = true;
+            }
+            return prev.filter((attachment) => attachment.id !== id);
+        });
+    }, []);
+
+    const handleAttachClick = useCallback(() => {
+        const modal = new AttachmentFileModal(app, (file) => {
+            void addAttachmentFromFile(file, "manual");
+        });
+        modal.open();
+    }, [addAttachmentFromFile, app]);
+
+    const handleDrop = useCallback(
+        (event: DragEvent<HTMLDivElement>) => {
+            event.preventDefault();
+            setIsDragActive(false);
+
+            const data = event.dataTransfer;
+            if (!data) {
+                return;
+            }
+
+            const paths = extractDropPaths(data);
+            if (paths.length === 0) {
+                return;
+            }
+
+            void addAttachmentsFromPaths(paths);
+        },
+        [addAttachmentsFromPaths]
+    );
+
+    const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
+        setIsDragActive(true);
+    }, []);
+
+    const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
+        if (event.currentTarget === event.target) {
+            setIsDragActive(false);
+        }
+    }, []);
+
     const activePermission = permissionQueue[0] ?? null;
     const pendingPermissionCount = Math.max(permissionQueue.length - 1, 0);
     const activePermissionInput = activePermission
@@ -431,18 +892,29 @@ export const ChatView = ({ client }: ChatViewProps) => {
 
     const handleSend = async () => {
         const trimmed = input.trim();
-        if (!trimmed || isSending) {
+        const currentAttachments = attachmentsRef.current;
+        if ((!trimmed && currentAttachments.length === 0) || isSending) {
             return;
         }
 
         setError(null);
         activeAssistantIdRef.current = null;
-        appendMessage("user", trimmed);
+        if (trimmed) {
+            appendMessage("user", trimmed);
+        } else {
+            const summary = currentAttachments.map((item) => item.name).join(", ");
+            appendMessage("user", `Attached: ${summary}`);
+        }
         setIsSending(true);
 
         try {
-            await client.sendPrompt(trimmed);
+            const prompt = await buildPromptBlocks(trimmed, currentAttachments);
+            await client.sendPrompt(prompt);
             setInput("");
+            setAttachments([]);
+            attachmentsRef.current = [];
+            autoAttachSuppressedRef.current = false;
+            void ensureAutoAttachment();
         } catch (err) {
             setInput(trimmed);
             const message = formatError(err);
@@ -457,7 +929,7 @@ export const ChatView = ({ client }: ChatViewProps) => {
         }
     };
 
-    const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    const handleKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
         if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
             void handleSend();
@@ -580,26 +1052,107 @@ export const ChatView = ({ client }: ChatViewProps) => {
                     void handleSend();
                 }}
             >
-                <textarea
-                    ref={inputRef}
-                    className="assistant-chat-textarea"
-                    value={input}
-                    onChange={(event) => setInput(event.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Ask the assistant"
-                    rows={1}
-                />
-                <button
-                    className="assistant-chat-send"
-                    type="submit"
-                    disabled={isSending || status === "connecting"}
+                {attachments.length > 0 ? (
+                    <div className="assistant-chat-attachments">
+                        {attachments.map((attachment) => {
+                            const modeLabel =
+                                attachment.mode === "inline" ? "inline" : "link";
+                            const sourceLabel =
+                                attachment.source === "auto" ? "active file" : "";
+                            const metaBits = [
+                                formatBytes(attachment.size),
+                                modeLabel,
+                                sourceLabel
+                            ].filter(Boolean);
+                            return (
+                                <div
+                                    key={attachment.id}
+                                    className={`assistant-chat-attachment is-${attachment.source}`}
+                                >
+                                    <div className="assistant-chat-attachment-main">
+                                        <div className="assistant-chat-attachment-name">
+                                            {attachment.name}
+                                        </div>
+                                        <div className="assistant-chat-attachment-meta">
+                                            {metaBits.join(" · ")}
+                                        </div>
+                                    </div>
+                                    <button
+                                        className="assistant-chat-attachment-remove"
+                                        type="button"
+                                        onClick={() =>
+                                            handleAttachmentRemove(attachment.id)
+                                        }
+                                    >
+                                        Remove
+                                    </button>
+                                </div>
+                            );
+                        })}
+                    </div>
+                ) : null}
+                <div
+                    className={`assistant-chat-input-row${
+                        isDragActive ? " is-drop" : ""
+                    }`}
+                    onDragEnter={handleDragOver}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
                 >
-                    Send
-                </button>
+                    <button
+                        className="assistant-chat-attach"
+                        type="button"
+                        onClick={handleAttachClick}
+                    >
+                        Attach
+                    </button>
+                    <textarea
+                        ref={inputRef}
+                        className="assistant-chat-textarea"
+                        value={input}
+                        onChange={(event) => setInput(event.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder="Ask the assistant"
+                        rows={1}
+                    />
+                    <button
+                        className="assistant-chat-send"
+                        type="submit"
+                        disabled={
+                            isSending ||
+                            status === "connecting" ||
+                            (!input.trim() && attachments.length === 0)
+                        }
+                    >
+                        Send
+                    </button>
+                </div>
             </form>
         </div>
     );
 };
+
+class AttachmentFileModal extends FuzzySuggestModal<TFile> {
+    private onChoose: (file: TFile) => void;
+
+    constructor(app: App, onChoose: (file: TFile) => void) {
+        super(app);
+        this.onChoose = onChoose;
+    }
+
+    getItems(): TFile[] {
+        return this.app.vault.getFiles();
+    }
+
+    getItemText(item: TFile): string {
+        return item.path;
+    }
+
+    onChooseItem(item: TFile, _evt: MouseEvent | KeyboardEvent): void {
+        this.onChoose(item);
+    }
+}
 
 export class AssistantChatView extends ItemView {
     root: Root | null = null;
@@ -625,7 +1178,7 @@ export class AssistantChatView extends ItemView {
         const client = this.clientProvider();
         this.root.render(
             <StrictMode>
-                <ChatView client={client} />
+                <ChatView client={client} app={this.app} />
             </StrictMode>
         );
     }

@@ -253,16 +253,15 @@ export default class AcpClient implements acp.Client {
         }
     }
 
-    async sendPrompt(text: string): Promise<acp.PromptResponse> {
+    async sendPrompt(
+        prompt: string | acp.ContentBlock[]
+    ): Promise<acp.PromptResponse> {
         const sessionId = await this.ensureSession();
+        const blocks: acp.ContentBlock[] =
+            typeof prompt === "string" ? [{ type: "text" as const, text: prompt }] : prompt;
         return this.connection!.prompt({
             sessionId,
-            prompt: [
-                {
-                    type: "text",
-                    text
-                }
-            ]
+            prompt: blocks
         });
     }
 
