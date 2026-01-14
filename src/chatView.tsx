@@ -57,14 +57,68 @@ const formatErrorDetails = (data: unknown) => {
 };
 
 const isPromptParamError = (error: unknown) => {
-    let current: unknown = error;
+    const asText = (value: unknown): string => {
+        if (typeof value === "string") {
+            return value;
+        }
 
-    while (current && typeof current === "object") {
-        const message = (current as { message?: unknown }).message;
+        if (!value || typeof value !== "object") {
+            return "";
+        }
+
+        const seen = new WeakSet<object>();
+        try {
+            return JSON.stringify(value, (_key, val) => {
+                if (val && typeof val === "object") {
+                    if (seen.has(val)) {
+                        return "[circular]";
+                    }
+                    seen.add(val);
+                }
+                return val;
+            });
+        } catch (stringifyError) {
+            return "";
+        }
+    };
+
+    const containsPromptParam = (value: unknown): boolean => {
+        if (typeof value === "string") {
+            return value.includes("prompt parameter");
+        }
+
+        if (!value || typeof value !== "object") {
+            return false;
+        }
+
+        const message = (value as { message?: unknown }).message;
         if (typeof message === "string" && message.includes("prompt parameter")) {
             return true;
         }
+
+        const details = (value as { details?: unknown }).details;
+        if (typeof details === "string" && details.includes("prompt parameter")) {
+            return true;
+        }
+
+        const blob = asText(value);
+        if (blob && blob.includes("prompt parameter")) {
+            return true;
+        }
+
+        return false;
+    };
+
+    if (containsPromptParam(error)) {
+        return true;
+    }
+
+    let current: unknown = error;
+    while (current && typeof current === "object") {
         const data = (current as { data?: unknown }).data;
+        if (containsPromptParam(data)) {
+            return true;
+        }
         current = (data as { error?: unknown } | undefined)?.error;
     }
 
@@ -392,8 +446,9 @@ export const ChatView = ({ client }: ChatViewProps) => {
         } catch (err) {
             setInput(trimmed);
             const message = formatError(err);
-            if (isPromptParamError(err)) {
+            if (isPromptParamError(err) || message.includes("prompt parameter")) {
                 console.warn("Prompt parameter error", err);
+                return;
             }
             setError(message);
             appendMessage("system", `Prompt error: ${message}`);
