@@ -245,7 +245,13 @@ const toVaultRelativePath = (app: App, inputPath: string): string | null => {
     return null;
 };
 
-const toVaultUri = (path: string) => `vault:///${encodeURI(path)}`;
+const encodeVaultPath = (path: string) =>
+    path
+        .split("/")
+        .map((segment) => encodeURIComponent(segment))
+        .join("/");
+
+const toVaultUri = (path: string) => `vault:///${encodeVaultPath(path)}`;
 
 const formatBytes = (bytes: number) => {
     if (!Number.isFinite(bytes)) {
