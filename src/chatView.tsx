@@ -403,6 +403,7 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
     const permissionQueueRef = useRef<PermissionRequestState[]>([]);
     const attachmentsRef = useRef<Attachment[]>([]);
     const autoAttachSuppressedRef = useRef(false);
+    const autoAttachRequestIdRef = useRef(0);
 
     const appendMessage = useCallback((role: ChatMessageRole, content: string) => {
         setMessages((prev) => [
@@ -590,7 +591,24 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
             return;
         }
 
+        const requestId = ++autoAttachRequestIdRef.current;
         const attachment = await buildAttachment(file, "auto");
+        if (autoAttachRequestIdRef.current !== requestId) {
+            return;
+        }
+
+        const activeFile = app.workspace.getActiveFile();
+        if (!activeFile || activeFile.path !== attachment.path) {
+            return;
+        }
+
+        const hasManualForActiveNow = attachmentsRef.current.some(
+            (item) => item.source !== "auto" && item.path === attachment.path
+        );
+        if (hasManualForActiveNow) {
+            return;
+        }
+
         setAttachments((prev) => {
             const withoutAuto = prev.filter((item) => item.source !== "auto");
             if (withoutAuto.some((item) => item.path === attachment.path)) {
