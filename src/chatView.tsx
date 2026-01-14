@@ -57,24 +57,15 @@ const formatErrorDetails = (data: unknown) => {
 };
 
 const isPromptParamError = (error: unknown) => {
-    if (!error || typeof error !== "object") {
-        return false;
-    }
+    let current: unknown = error;
 
-    const message = (error as { message?: unknown }).message;
-    if (typeof message === "string" && message.includes("prompt parameter")) {
-        return true;
-    }
-
-    const data = (error as { data?: unknown }).data;
-    if (data && typeof data === "object") {
-        const innerError = (data as { error?: unknown }).error;
-        if (innerError && typeof innerError === "object") {
-            const innerMessage = (innerError as { message?: unknown }).message;
-            if (typeof innerMessage === "string" && innerMessage.includes("prompt parameter")) {
-                return true;
-            }
+    while (current && typeof current === "object") {
+        const message = (current as { message?: unknown }).message;
+        if (typeof message === "string" && message.includes("prompt parameter")) {
+            return true;
         }
+        const data = (current as { data?: unknown }).data;
+        current = (data as { error?: unknown } | undefined)?.error;
     }
 
     return false;
@@ -315,6 +306,14 @@ export const ChatView = ({ client }: ChatViewProps) => {
         permissionQueueRef.current = permissionQueue;
     }, [permissionQueue]);
 
+    const enqueuePermissionRequest = useCallback((entry: PermissionRequestState) => {
+        setPermissionQueue((prev) => {
+            const next = [...prev, entry];
+            permissionQueueRef.current = next;
+            return next;
+        });
+    }, []);
+
     useEffect(() => {
         const unsubscribe = client.subscribePermissionRequests((request) => {
             return new Promise<RequestPermissionResponse>((resolve) => {
@@ -323,7 +322,7 @@ export const ChatView = ({ client }: ChatViewProps) => {
                     request,
                     resolve
                 };
-                setPermissionQueue((prev) => [...prev, entry]);
+                enqueuePermissionRequest(entry);
             });
         });
 
@@ -334,7 +333,7 @@ export const ChatView = ({ client }: ChatViewProps) => {
             }
             permissionQueueRef.current = [];
         };
-    }, [client]);
+    }, [client, enqueuePermissionRequest]);
 
     useEffect(() => {
         scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -350,6 +349,7 @@ export const ChatView = ({ client }: ChatViewProps) => {
 
                 const rest = prev.slice(1);
                 current.resolve({ outcome });
+                permissionQueueRef.current = rest;
                 return rest;
             });
         },
@@ -381,7 +381,6 @@ export const ChatView = ({ client }: ChatViewProps) => {
             return;
         }
 
-        setInput("");
         setError(null);
         activeAssistantIdRef.current = null;
         appendMessage("user", trimmed);
@@ -389,13 +388,13 @@ export const ChatView = ({ client }: ChatViewProps) => {
 
         try {
             await client.sendPrompt(trimmed);
+            setInput("");
         } catch (err) {
-            if (isPromptParamError(err)) {
-                console.warn("Ignoring prompt parameter error", err);
-                return;
-            }
-
+            setInput(trimmed);
             const message = formatError(err);
+            if (isPromptParamError(err)) {
+                console.warn("Prompt parameter error", err);
+            }
             setError(message);
             appendMessage("system", `Prompt error: ${message}`);
         } finally {
