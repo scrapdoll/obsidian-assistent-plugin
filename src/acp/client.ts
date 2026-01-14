@@ -41,6 +41,18 @@ export default class AcpClient implements acp.Client {
         this.onExtNotification = options.onExtNotification;
     }
 
+    private resetConnectionState(agentProcess?: ChildProcess) {
+        if (agentProcess && this.agentProcess && agentProcess !== this.agentProcess) {
+            return;
+        }
+
+        this.agentProcess = null;
+        this.connection = null;
+        this.initializationPromise = null;
+        this.sessionPromise = null;
+        this.sessionId = null;
+    }
+
     async initialize(): Promise<acp.InitializeResponse> {
         if (this.initializationPromise) {
             return this.initializationPromise;
@@ -67,10 +79,12 @@ export default class AcpClient implements acp.Client {
 
             agentProcess.on("error", (error) => {
                 console.log(`process error: ${error}`);
+                this.resetConnectionState(agentProcess);
             });
 
             agentProcess.on("exit", (code, signal) => {
                 console.log(`process exit with code: ${code} signal: ${signal}`);
+                this.resetConnectionState(agentProcess);
             });
 
             const stdin = agentProcess.stdin;
@@ -147,10 +161,7 @@ export default class AcpClient implements acp.Client {
             this.agentProcess = null;
         }
 
-        this.connection = null;
-        this.initializationPromise = null;
-        this.sessionPromise = null;
-        this.sessionId = null;
+        this.resetConnectionState();
 
         return Promise.resolve();
     }
