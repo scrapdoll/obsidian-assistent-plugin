@@ -1,6 +1,6 @@
 import { Plugin, WorkspaceLeaf } from "obsidian";
 import { DEFAULT_SETTINGS, AssistantSettingTab, AssistantSettings } from "./settings";
-import { ExampleView, VIEW_TYPE_EXAMPLE } from 'chatView';
+import { AssistentChatView, VIEW_TYPE_EXAMPLE } from 'chatView';
 import AcpClient from "acp/client";
 
 export default class ObsidianAssistantPlugin extends Plugin {
@@ -11,7 +11,7 @@ export default class ObsidianAssistantPlugin extends Plugin {
 	async onload() {
 		this.registerView(
 			VIEW_TYPE_EXAMPLE,
-			(leaf) => new ExampleView(leaf)
+			(leaf) => new AssistentChatView(leaf, () => this.getOrCreateAcpClient())
 		);
 		await this.loadSettings();
 		this.addSettingTab(new AssistantSettingTab(this.app, this));
@@ -19,8 +19,8 @@ export default class ObsidianAssistantPlugin extends Plugin {
 		// This creates an icon in the left ribbon.
 		this.addRibbonIcon('dice', 'Open assistant view', () => {
 			void this.activateView();
-			this.getOrCreateAcpClient();
-			this.acpClient?.initialize();
+			const client = this.getOrCreateAcpClient();
+			void client.initialize();
 		});
 
 
@@ -34,6 +34,9 @@ export default class ObsidianAssistantPlugin extends Plugin {
 	}
 
 	onunload() {
+		if (this.acpClient) {
+			void this.acpClient.disconnect();
+		}
 	}
 
 	async loadSettings() {
@@ -70,7 +73,7 @@ export default class ObsidianAssistantPlugin extends Plugin {
 
 	getOrCreateAcpClient(): AcpClient {
 		if (!this.acpClient) {
-			this.acpClient = new AcpClient(this);
+			this.acpClient = new AcpClient({ app: this.app });
 		}
 
 		return this.acpClient;
