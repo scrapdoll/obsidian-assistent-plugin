@@ -45,10 +45,15 @@ export const useMessages = () => {
         activeAssistantIdRef.current = null;
     }, []);
 
+    const resetActiveAssistant = useCallback(() => {
+        activeAssistantIdRef.current = null;
+    }, []);
+
     return {
         messages,
         appendMessage,
         appendAssistantText,
-        clearMessages
+        clearMessages,
+        resetActiveAssistant
     };
 };

@@ -25,7 +25,7 @@ import { ChatInput } from "./components";
 import { ChatError } from "./components";
 
 export const ChatView = ({ client, app }: ChatViewProps) => {
-    const { messages, appendMessage, appendAssistantText } = useMessages();
+    const { messages, appendMessage, appendAssistantText, resetActiveAssistant } = useMessages();
     const { activePermission, pendingPermissionCount, handlePermissionSelect, handlePermissionCancel } =
         usePermissions({ client, onMessage: appendMessage });
     const {
@@ -52,6 +52,7 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
         }
 
         setError(null);
+        resetActiveAssistant();
         if (trimmed) {
             appendMessage("user", trimmed);
         } else {
