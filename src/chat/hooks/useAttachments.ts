@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { App, TFile, Modal } from "obsidian";
+import type { ContentBlock } from "@agentclientprotocol/sdk";
 import type { Attachment, AttachmentSource, ChatMessageRole } from "../types";
 
 class FileSelectModal extends Modal {
@@ -19,46 +20,19 @@ class FileSelectModal extends Modal {
         const { contentEl } = this;
         contentEl.empty();
 
-        const listContainer = contentEl.createDiv({ cls: 'file-list' });
-        listContainer.style.maxHeight = '400px';
-        listContainer.style.overflowY = 'auto';
-
-        const list = listContainer.createEl('ul');
-        list.style.listStyle = 'none';
-        list.style.padding = '0';
+        const listContainer = contentEl.createDiv({ cls: "assistant-file-list" });
+        const list = listContainer.createEl("ul", { cls: "assistant-file-list-items" });
 
         for (const file of this.files) {
-            const item = list.createEl('li');
-            item.style.padding = '8px 12px';
-            item.style.cursor = 'pointer';
-            item.style.borderBottom = '1px solid var(--background-modifier-border-hover)';
-
+            const item = list.createEl("li", { cls: "assistant-file-list-item" });
             item.textContent = file.path;
             item.addEventListener('click', () => {
                 this.onSelect(file);
                 this.close();
             });
-
-            item.addEventListener('mouseenter', () => {
-                item.style.backgroundColor = 'var(--background-modifier-hover)';
-            });
-
-            item.addEventListener('mouseleave', () => {
-                item.style.backgroundColor = '';
-            });
         }
     }
 }
-
-
-
-
-type AttachmentFileModalConstructor = new (
-    app: App,
-    callback: (file: TFile) => void
-) => import("obsidian").FuzzySuggestModal<TFile>;
-
-declare const AttachmentFileModal: AttachmentFileModalConstructor;
 
 import {
     createMessageId,
@@ -245,8 +219,8 @@ export const useAttachments = ({ app, onMessage }: UseAttachmentsProps) => {
     }, [addAttachmentFromFile, app]);
 
     const buildPromptBlocks = useCallback(
-        async (text: string, currentAttachments: Attachment[]) => {
-            const blocks: any[] = [];
+        async (text: string, currentAttachments: Attachment[]): Promise<ContentBlock[]> => {
+            const blocks: ContentBlock[] = [];
             const trimmed = text.trim();
 
             if (trimmed) {
@@ -279,7 +253,7 @@ export const useAttachments = ({ app, onMessage }: UseAttachmentsProps) => {
 
             return blocks;
         },
-        [app, onMessage]
+        []
     );
 
     return {

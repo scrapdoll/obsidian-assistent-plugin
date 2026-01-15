@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { KeyboardEvent } from "react";
 import type {
     SessionNotification,
     PermissionOption,
 } from "@agentclientprotocol/sdk";
-import type { App } from "obsidian";
-import type AcpClient from "acp/client";
-
 import type { ChatViewProps } from "./types";
 import { useMessages } from "./hooks";
 import { usePermissions } from "./hooks";
@@ -37,8 +35,10 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
         buildPromptBlocks,
         ensureAutoAttachment,
     } = useAttachments({ app, onMessage: appendMessage });
-    const { isDragActive, handleDrop, handleDragOver, handleDragLeave, dragHandlers } =
-        useDragDrop({ onDropPaths: addAttachmentsFromPaths });
+    const handleDropPaths = useCallback((paths: string[]) => {
+        void addAttachmentsFromPaths(paths);
+    }, [addAttachmentsFromPaths]);
+    const { isDragActive, dragHandlers } = useDragDrop({ onDropPaths: handleDropPaths });
 
     const [input, setInput] = useState("");
     const [status, setStatus] = useState<"connecting" | "ready" | "error">("connecting");
@@ -80,13 +80,17 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
         } finally {
             setIsSending(false);
         }
-    }, [input, attachments, isSending, appendMessage, buildPromptBlocks, client]);
+    }, [input, attachments, isSending, appendMessage, buildPromptBlocks, client, resetActiveAssistant]);
 
-    const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const handleKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
         if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
             void handleSend();
         }
+    }, [handleSend]);
+
+    const handleSendClick = useCallback(() => {
+        void handleSend();
     }, [handleSend]);
 
     useEffect(() => {
@@ -229,7 +233,7 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
                 onAttachmentRemove={handleAttachmentRemove}
                 onInputChange={setInput}
                 onAttach={handleAttachClick}
-                onSend={handleSend}
+                onSend={handleSendClick}
                 onKeyDown={handleKeyDown}
             />
         </div>

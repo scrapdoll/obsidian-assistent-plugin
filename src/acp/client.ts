@@ -1,6 +1,39 @@
 import * as acp from "@agentclientprotocol/sdk";
-import { ChildProcess, spawn } from "child_process";
 import { App, FileSystemAdapter, Platform, TFile, TFolder, normalizePath } from "obsidian";
+
+type AgentProcess = {
+    pid?: number;
+    stdin?: {
+        write: (chunk: Uint8Array) => void;
+        end: () => void;
+    } | null;
+    stdout?: {
+        on: (event: "data" | "end", listener: (chunk?: Uint8Array) => void) => void;
+    } | null;
+    on: (event: "spawn" | "error" | "exit", listener: (...args: unknown[]) => void) => void;
+    once: (event: "close", listener: () => void) => void;
+    kill: (signal?: string) => void;
+};
+
+type SpawnFn = (
+    command: string,
+    args?: string[],
+    options?: { stdio?: ["pipe", "pipe", "pipe"] }
+) => AgentProcess;
+
+const getSpawn = (): SpawnFn => {
+    const requireFn = (window as unknown as { require?: (id: string) => unknown }).require;
+    if (!requireFn) {
+        throw new Error("Node require is unavailable; ACP is desktop-only.");
+    }
+
+    const childProcess = requireFn("child_process") as { spawn?: SpawnFn };
+    if (!childProcess.spawn) {
+        throw new Error("child_process.spawn is unavailable.");
+    }
+
+    return childProcess.spawn;
+};
 
 export type AcpClientOptions = {
     app: App;
@@ -29,7 +62,7 @@ export default class AcpClient implements acp.Client {
     private onExtMethod?: AcpClientOptions["onExtMethod"];
     private onExtNotification?: AcpClientOptions["onExtNotification"];
     private connection: acp.ClientSideConnection | null = null;
-    private agentProcess: ChildProcess | null = null;
+    private agentProcess: AgentProcess | null = null;
     private initializationPromise: Promise<acp.InitializeResponse> | null = null;
     private sessionPromise: Promise<acp.NewSessionResponse> | null = null;
     private sessionId: acp.SessionId | null = null;
@@ -46,7 +79,7 @@ export default class AcpClient implements acp.Client {
         this.onExtNotification = options.onExtNotification;
     }
 
-    private resetConnectionState(agentProcess?: ChildProcess) {
+    private resetConnectionState(agentProcess?: AgentProcess) {
         if (agentProcess && this.agentProcess && agentProcess !== this.agentProcess) {
             return;
         }
@@ -72,6 +105,7 @@ export default class AcpClient implements acp.Client {
 
             const spawnCommand = shell || "claude-code-acp";
             const spawnArgs = shell ? ["-lc", "claude-code-acp"] : [];
+            const spawn = getSpawn();
             const agentProcess = spawn(spawnCommand, spawnArgs, {
                 stdio: ["pipe", "pipe", "pipe"]
             });
@@ -79,16 +113,16 @@ export default class AcpClient implements acp.Client {
             this.agentProcess = agentProcess;
 
             agentProcess.on("spawn", () => {
-                console.log(`process spawned successfully, PDI: ${agentProcess.pid}`);
+                console.debug("ACP process spawned", { pid: agentProcess.pid });
             });
 
             agentProcess.on("error", (error) => {
-                console.log(`process error: ${error}`);
+                console.warn("ACP process error", error);
                 this.resetConnectionState(agentProcess);
             });
 
             agentProcess.on("exit", (code, signal) => {
-                console.log(`process exit with code: ${code} signal: ${signal}`);
+                console.debug("ACP process exit", { code, signal });
                 this.resetConnectionState(agentProcess);
             });
 
@@ -110,8 +144,10 @@ export default class AcpClient implements acp.Client {
 
             const output = new ReadableStream<Uint8Array>({
                 start(controller) {
-                    stdout.on("data", (chunk: Uint8Array) => {
-                        controller.enqueue(chunk);
+                    stdout.on("data", (chunk?: Uint8Array) => {
+                        if (chunk) {
+                            controller.enqueue(chunk);
+                        }
                     });
                     stdout.on("end", () => {
                         controller.close();
@@ -182,7 +218,7 @@ export default class AcpClient implements acp.Client {
             try {
                 return await handler(params);
             } catch (error) {
-                console.warn(`Permission request handler error: ${error}`);
+                console.warn("Permission request handler error", error);
             }
         }
 
@@ -194,7 +230,7 @@ export default class AcpClient implements acp.Client {
             try {
                 await handler(params);
             } catch (error) {
-                console.warn(`Session update handler error: ${error}`);
+                console.warn("Session update handler error", error);
             }
         }
 

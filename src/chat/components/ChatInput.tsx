@@ -1,4 +1,5 @@
 import { memo, forwardRef } from "react";
+import type { KeyboardEvent } from "react";
 import type { Attachment } from "../types";
 import { AttachmentList } from "./AttachmentList";
 
@@ -11,7 +12,7 @@ interface ChatInputProps {
     onInputChange: (value: string) => void;
     onAttach: () => void;
     onSend: () => void;
-    onKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+    onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
 }
 
 export const ChatInput = memo(forwardRef<HTMLTextAreaElement, ChatInputProps>(function ChatInput({

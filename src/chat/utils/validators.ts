@@ -10,15 +10,18 @@ export const isPromptParamError = (error: unknown) => {
 
         const seen = new WeakSet<object>();
         try {
-            return JSON.stringify(value, (_key, val) => {
+            const stringifyReplacer = (_key: string, val: unknown): unknown => {
                 if (val && typeof val === "object") {
-                    if (seen.has(val)) {
+                    const objectVal = val;
+                    if (seen.has(objectVal)) {
                         return "[circular]";
                     }
-                    seen.add(val);
+                    seen.add(objectVal);
                 }
                 return val;
-            });
+            };
+
+            return JSON.stringify(value, stringifyReplacer);
         } catch {
             return "";
         }

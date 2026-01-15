@@ -1,9 +1,10 @@
 import { memo } from "react";
+import type { ReactNode } from "react";
 import type { ChatMessage } from "../types";
 
 interface ChatMessagesProps {
     messages: ChatMessage[];
-    children?: React.ReactNode;
+    children?: ReactNode;
 }
 
 export const ChatMessages = memo(function ChatMessages({ messages, children }: ChatMessagesProps) {

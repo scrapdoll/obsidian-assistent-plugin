@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type AcpClient from "acp/client";
 import type {
     PermissionOption,
-    RequestPermissionRequest,
     RequestPermissionResponse,
 } from "@agentclientprotocol/sdk";
 import type { PermissionRequestState } from "../types";

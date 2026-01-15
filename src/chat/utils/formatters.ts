@@ -88,7 +88,7 @@ export const formatPermissionInput = (input: unknown): string | null => {
         }
         return text;
     } catch {
-        return String(input);
+        return "[unserializable input]";
     }
 };
 
