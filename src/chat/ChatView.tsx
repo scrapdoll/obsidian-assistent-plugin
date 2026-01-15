@@ -9,6 +9,7 @@ import { useMessages } from "./hooks";
 import { usePermissions } from "./hooks";
 import { useAttachments } from "./hooks";
 import { useDragDrop } from "./hooks";
+import { useSelectedText } from "./hooks";
 
 import {
     describeToolCall,
@@ -27,14 +28,22 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
     const { messages, appendMessage, appendAssistantText, resetActiveAssistant } = useMessages();
     const { activePermission, pendingPermissionCount, handlePermissionSelect, handlePermissionCancel } =
         usePermissions({ client, onMessage: appendMessage });
+    const { currentSelection, clearSelection } = useSelectedText({ app });
     const {
         attachments,
         addAttachmentsFromPaths,
-        handleAttachmentRemove,
+        handleAttachmentRemove: handleFileAttachmentRemove,
         handleAttachClick,
         buildPromptBlocks,
         ensureAutoAttachment,
-    } = useAttachments({ app, onMessage: appendMessage });
+    } = useAttachments({ app, onMessage: appendMessage, selectionAttachment: currentSelection });
+    const handleAttachmentRemove = useCallback((id: string) => {
+        if (currentSelection && id === currentSelection.id) {
+            clearSelection();
+            return;
+        }
+        handleFileAttachmentRemove(id);
+    }, [clearSelection, currentSelection, handleFileAttachmentRemove]);
     const handleDropPaths = useCallback((paths: string[]) => {
         void addAttachmentsFromPaths(paths);
     }, [addAttachmentsFromPaths]);
@@ -58,7 +67,10 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
         if (trimmed) {
             appendMessage("user", trimmed);
         } else {
-            const summary = attachments.map((item) => item.name).join(", ");
+            const summary = attachments
+                .filter((item) => item.kind !== "selection")
+                .map((item) => item.name)
+                .join(", ");
             appendMessage("user", `Attached: ${summary}`);
         }
         setIsSending(true);
@@ -68,6 +80,10 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
             await client.sendPrompt(prompt);
             setInput("");
             inputRef.current?.focus();
+
+            if (currentSelection) {
+                clearSelection();
+            }
         } catch (err) {
             setInput(trimmed);
             const message = formatError(err);
@@ -80,7 +96,7 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
         } finally {
             setIsSending(false);
         }
-    }, [input, attachments, isSending, appendMessage, buildPromptBlocks, client, resetActiveAssistant]);
+    }, [input, attachments, isSending, appendMessage, buildPromptBlocks, client, resetActiveAssistant, currentSelection, app]);
 
     const handleKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
         if (event.key === "Enter" && !event.shiftKey) {

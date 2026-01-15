@@ -38,3 +38,5 @@ export const TEXT_EXTENSIONS = new Set([
     "php",
     "sql",
 ]);
+
+export const MAX_SELECTION_SIZE = 10 * 1024;
