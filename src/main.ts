@@ -4,7 +4,7 @@ import { AssistantChatView, VIEW_TYPE_EXAMPLE } from "chatView";
 import AcpClient from "acp/client";
 
 export default class ObsidianAssistantPlugin extends Plugin {
-	settings: AssistantSettings;
+	settings: AssistantSettings = DEFAULT_SETTINGS;
 
 	private acpClient: AcpClient | null = null;
 

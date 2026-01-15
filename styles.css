@@ -200,6 +200,27 @@ If your plugin does not need CSS, delete this file.
 	border-color: var(--color-red);
 }
 
+.assistant-file-list {
+	max-height: 400px;
+	overflow-y: auto;
+}
+
+.assistant-file-list-items {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+}
+
+.assistant-file-list-item {
+	padding: 8px 12px;
+	cursor: pointer;
+	border-bottom: 1px solid var(--background-modifier-border-hover);
+}
+
+.assistant-file-list-item:hover {
+	background: var(--background-modifier-hover);
+}
+
 .assistant-chat-permission-option.is-cancel {
 	background: transparent;
 	color: var(--text-muted);
