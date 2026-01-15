@@ -8,7 +8,7 @@ interface ChatMessagesProps {
 
 export const ChatMessages = memo(function ChatMessages({ messages, children }: ChatMessagesProps) {
     return (
-        <div className="assistant-chat-messages">
+        <section className="assistant-chat-messages" aria-live="polite" aria-label="Chat messages">
             {messages.length === 0 ? (
                 <div className="assistant-chat-empty">
                     Start a conversation to see responses here.
@@ -18,7 +18,7 @@ export const ChatMessages = memo(function ChatMessages({ messages, children }: C
                 <ChatMessageItem key={message.id} message={message} />
             ))}
             {children}
-        </div>
+        </section>
     );
 });
 
@@ -28,8 +28,8 @@ interface ChatMessageItemProps {
 
 export const ChatMessageItem = memo(function ChatMessageItem({ message }: ChatMessageItemProps) {
     return (
-        <div className={`assistant-chat-message ${message.role}`}>
+        <article className={`assistant-chat-message ${message.role}`}>
             {message.content}
-        </div>
+        </article>
     );
 });

@@ -10,16 +10,16 @@ export const ChatHeader = memo(function ChatHeader({ status, isSending }: ChatHe
     const statusTone = getStatusTone(status, isSending);
 
     return (
-        <div className="assistant-chat-header">
+        <header className="assistant-chat-header">
             <div>
-                <div className="assistant-chat-title">Assistant</div>
-                <div className="assistant-chat-subtitle">Agent session</div>
+                <h1 className="assistant-chat-title">Assistant</h1>
+                <p className="assistant-chat-subtitle">Agent session</p>
             </div>
-            <div className={`assistant-chat-status is-${statusTone}`}>
-                <span className="assistant-chat-status-dot" />
+            <div className={`assistant-chat-status is-${statusTone}`} role="status" aria-live="polite">
+                <span className="assistant-chat-status-dot" aria-hidden="true" />
                 <span>{statusLabel}</span>
             </div>
-        </div>
+        </header>
     );
 });
 

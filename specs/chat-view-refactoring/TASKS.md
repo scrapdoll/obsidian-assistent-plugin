@@ -23,22 +23,22 @@
 - [x] Keep `ChatView` as orchestrator only
 
 ## Phase 4: Performance & Stability
-- [ ] Wrap handlers with `useCallback` where passed to child components
-- [ ] Memoize expensive computed values with `useMemo` (only after profiling)
-- [ ] Add `React.memo` to stable list items
+- [x] Wrap handlers with `useCallback` where passed to child components
+- [x] Memoize expensive computed values with `useMemo` (only after profiling)
+- [x] Add `React.memo` to stable list items
 - [ ] Re-check unnecessary re-renders using React DevTools Profiler
 - [ ] Evaluate need for list virtualization (only if message volume warrants)
 
 ## Phase 5: Accessibility & UX
-- [ ] Add `aria-label`/`role`/`aria-live` where needed (status, errors, input)
-- [ ] Restore focus to input after send and permission actions
-- [ ] Ensure logical tab order and keyboard shortcuts
-- [ ] Replace non-semantic `div` with semantic elements where appropriate
+- [x] Add `aria-label`/`role`/`aria-live` where needed (status, errors, input)
+- [x] Restore focus to input after send and permission actions
+- [x] Ensure logical tab order and keyboard shortcuts
+- [x] Replace non-semantic `div` with semantic elements where appropriate
 
 ## Phase 6: Type Safety & Strictness
-- [ ] Strengthen attachment types with discriminated unions (inline vs reference)
-- [ ] Remove unsafe type assertions; add narrowing helpers
-- [ ] Enable `strict: true` in `tsconfig.json` and fix resulting issues
+- [x] Strengthen attachment types with discriminated unions (inline vs reference)
+- [x] Remove unsafe type assertions; add narrowing helpers
+- [x] Enable `strict: true` in `tsconfig.json` and fix resulting issues
 - [ ] Add exhaustive checks for unions/switches
 
 ## Phase 7: Testing (Optional, if enabled)

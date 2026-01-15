@@ -16,15 +16,16 @@ export const AttachmentList = memo(function AttachmentList({
     }
 
     return (
-        <div className="assistant-chat-attachments">
+        <ul className="assistant-chat-attachments" role="list" aria-label="Attached files">
             {attachments.map((attachment) => (
-                <AttachmentItem
-                    key={attachment.id}
-                    attachment={attachment}
-                    onRemove={onRemove}
-                />
+                <li key={attachment.id}>
+                    <AttachmentItem
+                        attachment={attachment}
+                        onRemove={onRemove}
+                    />
+                </li>
             ))}
-        </div>
+        </ul>
     );
 });
 
@@ -57,6 +58,7 @@ export const AttachmentItem = memo(function AttachmentItem({
                 className="assistant-chat-attachment-remove"
                 type="button"
                 onClick={() => onRemove(attachment.id)}
+                aria-label={`Remove ${attachment.name}`}
             >
                 Remove
             </button>

@@ -25,12 +25,12 @@ export const PermissionPrompt = memo(function PermissionPrompt({
     const activePermissionInput = formatPermissionInput(request.toolCall.rawInput);
 
     return (
-        <div className="assistant-chat-permission">
+        <div className="assistant-chat-permission" role="alert" aria-live="assertive">
             <div className="assistant-chat-permission-header">
                 <div>
-                    <div className="assistant-chat-permission-title">
+                    <h2 className="assistant-chat-permission-title">
                         Permission required
-                    </div>
+                    </h2>
                     <div className="assistant-chat-permission-meta">
                         {formatPermissionTitle(request)}
                     </div>

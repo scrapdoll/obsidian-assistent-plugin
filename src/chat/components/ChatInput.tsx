@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, forwardRef } from "react";
 import type { Attachment } from "../types";
 import { AttachmentList } from "./AttachmentList";
 
@@ -14,7 +14,7 @@ interface ChatInputProps {
     onKeyDown: (event: React.KeyboardEvent<HTMLTextAreaElement>) => void;
 }
 
-export const ChatInput = memo(function ChatInput({
+export const ChatInput = memo(forwardRef<HTMLTextAreaElement, ChatInputProps>(function ChatInput({
     input,
     isSending,
     isDragActive,
@@ -24,7 +24,7 @@ export const ChatInput = memo(function ChatInput({
     onAttach,
     onSend,
     onKeyDown,
-}: ChatInputProps) {
+}: ChatInputProps, ref) {
     return (
         <form
             className="assistant-chat-input"
@@ -42,25 +42,30 @@ export const ChatInput = memo(function ChatInput({
                     type="button"
                     onClick={onAttach}
                     disabled={isSending}
+                    aria-label="Attach file"
                 >
                     Attach
                 </button>
                 <textarea
+                    ref={ref}
                     className="assistant-chat-textarea"
                     value={input}
                     onChange={(event) => onInputChange(event.target.value)}
                     onKeyDown={onKeyDown}
                     placeholder="Ask assistant"
                     disabled={isSending}
+                    aria-label="Message input"
+                    aria-multiline="true"
                 />
                 <button
                     className="assistant-chat-send"
                     type="submit"
                     disabled={isSending || (!input.trim() && attachments.length === 0)}
+                    aria-label="Send message"
                 >
                     Send
                 </button>
             </div>
         </form>
     );
-});
+}));

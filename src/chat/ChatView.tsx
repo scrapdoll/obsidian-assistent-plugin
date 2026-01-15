@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type {
     SessionNotification,
+    PermissionOption,
 } from "@agentclientprotocol/sdk";
 import type { App } from "obsidian";
 import type AcpClient from "acp/client";
@@ -44,6 +45,7 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
     const [isSending, setIsSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
+    const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
     const handleSend = useCallback(async () => {
         const trimmed = input.trim();
@@ -65,6 +67,7 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
             const prompt = await buildPromptBlocks(trimmed, attachments);
             await client.sendPrompt(prompt);
             setInput("");
+            inputRef.current?.focus();
         } catch (err) {
             setInput(trimmed);
             const message = formatError(err);
@@ -192,6 +195,16 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
         scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }, [messages, isSending, activePermission]);
 
+    const wrappedHandlePermissionSelect = useCallback((option: PermissionOption) => {
+        handlePermissionSelect(option);
+        inputRef.current?.focus();
+    }, [handlePermissionSelect]);
+
+    const wrappedHandlePermissionCancel = useCallback(() => {
+        handlePermissionCancel();
+        inputRef.current?.focus();
+    }, [handlePermissionCancel]);
+
     return (
         <div className="assistant-chat-root" {...dragHandlers}>
             <ChatHeader status={status} isSending={isSending} />
@@ -200,8 +213,8 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
                     <PermissionPrompt
                         request={activePermission.request}
                         pendingCount={pendingPermissionCount}
-                        onSelect={handlePermissionSelect}
-                        onCancel={handlePermissionCancel}
+                        onSelect={wrappedHandlePermissionSelect}
+                        onCancel={wrappedHandlePermissionCancel}
                     />
                 )}
                 {error && <ChatError message={error} />}
@@ -209,6 +222,7 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
             </ChatMessages>
             <ChatInput
                 input={input}
+                ref={inputRef}
                 isSending={isSending}
                 isDragActive={isDragActive}
                 attachments={attachments}

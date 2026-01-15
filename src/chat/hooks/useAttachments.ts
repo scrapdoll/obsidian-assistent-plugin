@@ -31,15 +31,21 @@ export const useAttachments = ({ app, onMessage }: UseAttachmentsProps) => {
         async (file: TFile, source: AttachmentSource): Promise<Attachment> => {
             const size = file.stat.size;
             const textFile = isTextFile(file);
-            let mode: Attachment["mode"] =
-                textFile && size <= INLINE_ATTACHMENT_LIMIT ? "inline" : "reference";
-            let content: string | undefined;
 
-            if (mode === "inline") {
+            if (textFile && size <= INLINE_ATTACHMENT_LIMIT) {
                 try {
-                    content = await app.vault.read(file);
+                    const content = await app.vault.read(file);
+                    return {
+                        id: createMessageId("attachment"),
+                        path: file.path,
+                        name: file.name,
+                        size,
+                        kind: textFile ? "text" : "binary",
+                        mode: "inline",
+                        content,
+                        source
+                    };
                 } catch (error) {
-                    mode = "reference";
                     onMessage(
                         "system",
                         `Attachment read failed for ${file.path}: ${formatError(error)}`
@@ -53,8 +59,7 @@ export const useAttachments = ({ app, onMessage }: UseAttachmentsProps) => {
                 name: file.name,
                 size,
                 kind: textFile ? "text" : "binary",
-                mode,
-                content,
+                mode: "reference",
                 source
             };
         },
@@ -197,43 +202,11 @@ export const useAttachments = ({ app, onMessage }: UseAttachmentsProps) => {
                 const uri = toVaultUri(attachment.path);
 
                 if (attachment.mode === "inline") {
-                    let content = attachment.content;
-                    if (content == null) {
-                        const file = app.vault.getAbstractFileByPath(attachment.path);
-                        if (file instanceof TFile) {
-                            try {
-                                content = await app.vault.read(file);
-                            } catch (error) {
-                                onMessage(
-                                    "system",
-                                    `Attachment read failed for ${attachment.path}: ${formatError(error)}`
-                                );
-                                blocks.push({
-                                    type: "resource_link",
-                                    uri,
-                                    name: attachment.name,
-                                    title: attachment.path
-                                });
-                                continue;
-                            }
-                        }
-                    }
-
-                    if (content == null) {
-                        blocks.push({
-                            type: "resource_link",
-                            uri,
-                            name: attachment.name,
-                            title: attachment.path
-                        });
-                        continue;
-                    }
-
                     blocks.push({
                         type: "resource",
                         resource: {
                             uri,
-                            text: content
+                            text: attachment.content
                         }
                     });
                     continue;

@@ -15,16 +15,28 @@ export type ChatMessage = {
 
 export type AttachmentSource = "auto" | "manual";
 
-export type Attachment = {
+export type InlineAttachment = {
     id: string;
     path: string;
     name: string;
     size: number;
     kind: "text" | "binary";
-    mode: "inline" | "reference";
-    content?: string;
+    mode: "inline";
+    content: string;
     source: AttachmentSource;
 };
+
+export type ReferenceAttachment = {
+    id: string;
+    path: string;
+    name: string;
+    size: number;
+    kind: "text" | "binary";
+    mode: "reference";
+    source: AttachmentSource;
+};
+
+export type Attachment = InlineAttachment | ReferenceAttachment;
 
 export type PermissionRequestState = {
     id: string;
