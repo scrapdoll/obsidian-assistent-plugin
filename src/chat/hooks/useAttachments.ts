@@ -1,7 +1,65 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { App } from "obsidian";
-import { TFile } from "obsidian";
+import { App, TFile, Modal } from "obsidian";
 import type { Attachment, AttachmentSource, ChatMessageRole } from "../types";
+
+class FileSelectModal extends Modal {
+    constructor(
+        app: App,
+        private files: TFile[],
+        private onSelect: (file: TFile) => void
+    ) {
+        super(app);
+    }
+
+    onOpen() {
+        this.createContent();
+    }
+
+    private createContent() {
+        const { contentEl } = this;
+        contentEl.empty();
+
+        const listContainer = contentEl.createDiv({ cls: 'file-list' });
+        listContainer.style.maxHeight = '400px';
+        listContainer.style.overflowY = 'auto';
+
+        const list = listContainer.createEl('ul');
+        list.style.listStyle = 'none';
+        list.style.padding = '0';
+
+        for (const file of this.files) {
+            const item = list.createEl('li');
+            item.style.padding = '8px 12px';
+            item.style.cursor = 'pointer';
+            item.style.borderBottom = '1px solid var(--background-modifier-border-hover)';
+
+            item.textContent = file.path;
+            item.addEventListener('click', () => {
+                this.onSelect(file);
+                this.close();
+            });
+
+            item.addEventListener('mouseenter', () => {
+                item.style.backgroundColor = 'var(--background-modifier-hover)';
+            });
+
+            item.addEventListener('mouseleave', () => {
+                item.style.backgroundColor = '';
+            });
+        }
+    }
+}
+
+
+
+
+type AttachmentFileModalConstructor = new (
+    app: App,
+    callback: (file: TFile) => void
+) => import("obsidian").FuzzySuggestModal<TFile>;
+
+declare const AttachmentFileModal: AttachmentFileModalConstructor;
+
 import {
     createMessageId,
     formatError,
@@ -180,8 +238,7 @@ export const useAttachments = ({ app, onMessage }: UseAttachmentsProps) => {
     }, []);
 
     const handleAttachClick = useCallback(() => {
-        const AttachmentFileModal = (require("obsidian") as any).AttachmentFileModal;
-        const modal = new AttachmentFileModal(app, (file: TFile) => {
+        const modal = new FileSelectModal(app, app.vault.getFiles(), (file: TFile) => {
             void addAttachmentFromFile(file, "manual");
         });
         modal.open();
