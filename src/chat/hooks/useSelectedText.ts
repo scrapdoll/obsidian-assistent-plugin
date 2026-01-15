@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { App } from "obsidian";
 import { MarkdownView } from "obsidian";
-import type { Editor } from "obsidian";
+import type { App, Editor } from "obsidian";
 import { MAX_SELECTION_SIZE } from "../constants";
 import { createMessageId } from "../utils";
 import type { SelectionAttachment } from "../types";
@@ -16,14 +15,18 @@ export interface UseSelectedTextReturn {
     clearSelection: () => void;
 }
 
-const extractSelection = (editor: import("obsidian").Editor): string | null => {
+const extractSelection = (editor: Editor): string | null => {
     const selection = editor.getSelection();
-    if (!selection) return null;
-    return selection.trim() || null;
+    if (!selection) {
+        return null;
+    }
+    const trimmed = selection.trim();
+    return trimmed.length > 0 ? trimmed : null;
 };
 
 const createSelectionAttachment = (
     app: App,
+    editor: Editor,
     text: string
 ): SelectionAttachment | null => {
     if (text.length > MAX_SELECTION_SIZE) {
@@ -31,9 +34,8 @@ const createSelectionAttachment = (
     }
 
     const file = app.workspace.getActiveFile();
-    const editor = app.workspace.getActiveViewOfType(MarkdownView)?.editor;
-    const from = editor?.getCursor("from");
-    const to = editor?.getCursor("to");
+    const from = editor.getCursor("from");
+    const to = editor.getCursor("to");
 
     return {
         id: createMessageId("selection"),
@@ -41,8 +43,8 @@ const createSelectionAttachment = (
         content: text,
         charCount: text.length,
         filePath: file?.path || "",
-        lineStart: from?.line || 0,
-        lineEnd: to?.line || 0,
+        lineStart: from.line,
+        lineEnd: to.line,
     };
 };
 
@@ -51,116 +53,100 @@ export const useSelectedText = ({
     onSelectionChange,
 }: UseSelectedTextProps): UseSelectedTextReturn => {
     const [currentSelection, setCurrentSelection] = useState<SelectionAttachment | null>(null);
-    const lastValidSelectionRef = useRef<SelectionAttachment | null>(null);
+    const currentSelectionRef = useRef<SelectionAttachment | null>(null);
     const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const activeViewRef = useRef<MarkdownView | null>(null);
-
-    const handleSelectionChange = useCallback(() => {
-        const activeView = app.workspace.getActiveViewOfType(MarkdownView);
-        console.log("[useSelectedText] handleSelectionChange called, activeView:", !!activeView);
-
-        const selectedText = activeView?.editor ? extractSelection(activeView.editor) : null;
-        console.log("[useSelectedText] extracted text:", selectedText ? selectedText.substring(0, 50) + "..." : null);
-
-        if (selectedText) {
-            const attachment = createSelectionAttachment(app, selectedText);
-            console.log("[useSelectedText] created attachment:", attachment);
-            if (attachment) {
-                lastValidSelectionRef.current = attachment;
-                setCurrentSelection(attachment);
-                onSelectionChange?.(attachment);
-            }
-        } else if (activeView?.editor) {
-            console.log("[useSelectedText] Editor active but no selection, checking file");
-            const currentFile = app.workspace.getActiveFile();
-            const lastFile = lastValidSelectionRef.current?.filePath;
-
-            if (lastValidSelectionRef.current && currentFile?.path === lastFile) {
-                console.log("[useSelectedText] File unchanged, keeping selection");
-                return;
-            }
-
-            console.log("[useSelectedText] File changed or no previous selection, clearing");
-            lastValidSelectionRef.current = null;
-            setCurrentSelection(null);
-            onSelectionChange?.(null);
-        } else {
-            console.log("[useSelectedText] No active MarkdownView editor, keeping current selection:", lastValidSelectionRef.current);
-        }
-    }, [app, onSelectionChange]);
-
-    const clearSelection = useCallback(() => {
-        console.log("[useSelectedText] clearSelection called");
-        lastValidSelectionRef.current = null;
-        setCurrentSelection(null);
-        onSelectionChange?.(null);
-    }, [onSelectionChange]);
 
     useEffect(() => {
-        const handleEditorChange = (...data: unknown[]) => {
-            if (debounceTimerRef.current) {
-                clearTimeout(debounceTimerRef.current);
+        currentSelectionRef.current = currentSelection;
+    }, [currentSelection]);
+
+    const commitSelection = useCallback((next: SelectionAttachment | null) => {
+        setCurrentSelection((prev) => {
+            const isSame =
+                prev &&
+                next &&
+                prev.content === next.content &&
+                prev.filePath === next.filePath &&
+                prev.lineStart === next.lineStart &&
+                prev.lineEnd === next.lineEnd;
+
+            if (isSame || (!prev && !next)) {
+                return prev;
             }
-            debounceTimerRef.current = setTimeout(() => {
-                handleSelectionChange();
-            }, 200);
-        };
 
-        const handleFileOpen = () => {
-            console.log("[useSelectedText] File opened, checking if selection should be cleared");
-            const lastFile = lastValidSelectionRef.current?.filePath;
-            const currentFile = app.workspace.getActiveFile()?.path;
+            onSelectionChange?.(next);
+            return next;
+        });
+    }, [onSelectionChange]);
 
-            if (lastFile && currentFile && lastFile !== currentFile) {
-                console.log("[useSelectedText] File changed from", lastFile, "to", currentFile, ", clearing selection");
-                lastValidSelectionRef.current = null;
-                setCurrentSelection(null);
-                onSelectionChange?.(null);
-            } else {
-                console.log("[useSelectedText] File unchanged or no previous selection, keeping selection");
+    const updateSelection = useCallback(() => {
+        const activeView = app.workspace.getActiveViewOfType(MarkdownView);
+        const editor = activeView?.editor;
+        const activeFile = app.workspace.getActiveFile();
+        const previousSelection = currentSelectionRef.current;
+        const isSameFile =
+            !!previousSelection &&
+            !!activeFile &&
+            previousSelection.filePath === activeFile.path;
+
+        if (!editor) {
+            if (previousSelection && isSameFile) {
+                return;
             }
-        };
+            commitSelection(null);
+            return;
+        }
 
-        const handleActiveLeafChange = () => {
-            console.log("[useSelectedText] Active leaf changed");
-            const activeFile = app.workspace.getActiveFile();
-            const lastFile = lastValidSelectionRef.current?.filePath;
-            console.log("[useSelectedText] activeFile:", activeFile?.path, "lastFile:", lastFile);
-
-            if (lastFile && activeFile && lastFile !== activeFile.path) {
-                console.log("[useSelectedText] File changed, clearing selection");
-                lastValidSelectionRef.current = null;
-                setCurrentSelection(null);
-                onSelectionChange?.(null);
-            } else {
-                console.log("[useSelectedText] File unchanged or no previous selection, keeping selection");
+        const selectedText = extractSelection(editor);
+        if (!selectedText) {
+            const editorHasFocus = typeof editor.hasFocus === "function" ? editor.hasFocus() : false;
+            if (!editorHasFocus && previousSelection && isSameFile) {
+                return;
             }
-        };
+            commitSelection(null);
+            return;
+        }
 
-        const handleSelectionChangeDebounced = () => {
-            if (debounceTimerRef.current) {
-                clearTimeout(debounceTimerRef.current);
-            }
-            debounceTimerRef.current = setTimeout(() => {
-                handleSelectionChange();
-            }, 200);
-        };
+        const attachment = createSelectionAttachment(app, editor, selectedText);
+        if (!attachment) {
+            commitSelection(null);
+            return;
+        }
 
-        app.workspace.on("editor-change", handleEditorChange);
-        app.workspace.on("file-open", handleFileOpen);
-        app.workspace.on("active-leaf-change", handleActiveLeafChange);
-        document.addEventListener("selectionchange", handleSelectionChangeDebounced);
+        commitSelection(attachment);
+    }, [app, commitSelection]);
+
+    const clearSelection = useCallback(() => {
+        commitSelection(null);
+    }, [commitSelection]);
+
+    const scheduleUpdate = useCallback(() => {
+        if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+        }
+        debounceTimerRef.current = setTimeout(() => {
+            updateSelection();
+        }, 200);
+    }, [updateSelection]);
+
+    useEffect(() => {
+        const editorChangeRef = app.workspace.on("editor-change", scheduleUpdate);
+        const fileOpenRef = app.workspace.on("file-open", scheduleUpdate);
+        const activeLeafRef = app.workspace.on("active-leaf-change", scheduleUpdate);
+
+        document.addEventListener("selectionchange", scheduleUpdate);
+        scheduleUpdate();
 
         return () => {
             if (debounceTimerRef.current) {
                 clearTimeout(debounceTimerRef.current);
             }
-            app.workspace.off("editor-change", handleEditorChange);
-            app.workspace.off("file-open", handleFileOpen);
-            app.workspace.off("active-leaf-change", handleActiveLeafChange);
-            document.removeEventListener("selectionchange", handleSelectionChangeDebounced);
+            app.workspace.offref(editorChangeRef);
+            app.workspace.offref(fileOpenRef);
+            app.workspace.offref(activeLeafRef);
+            document.removeEventListener("selectionchange", scheduleUpdate);
         };
-    }, [app, handleSelectionChange, onSelectionChange]);
+    }, [app, scheduleUpdate]);
 
     return { currentSelection, clearSelection };
 };

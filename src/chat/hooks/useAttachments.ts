@@ -72,11 +72,6 @@ export const useAttachments = ({
         ? [...attachments, selectionAttachment]
         : attachments;
 
-    useEffect(() => {
-        console.log("[useAttachments] selectionAttachment changed:", selectionAttachment);
-        console.log("[useAttachments] allAttachments:", allAttachments);
-    }, [selectionAttachment, allAttachments]);
-
     const buildAttachment = useCallback(
         async (file: TFile, source: AttachmentSource): Promise<Attachment> => {
             const size = file.stat.size;

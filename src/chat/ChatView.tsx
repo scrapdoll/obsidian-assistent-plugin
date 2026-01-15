@@ -32,16 +32,18 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
     const {
         attachments,
         addAttachmentsFromPaths,
-        handleAttachmentRemove,
+        handleAttachmentRemove: handleFileAttachmentRemove,
         handleAttachClick,
         buildPromptBlocks,
         ensureAutoAttachment,
     } = useAttachments({ app, onMessage: appendMessage, selectionAttachment: currentSelection });
-
-    useEffect(() => {
-        console.log("[ChatView] currentSelection:", currentSelection);
-        console.log("[ChatView] attachments:", attachments);
-    }, [currentSelection, attachments]);
+    const handleAttachmentRemove = useCallback((id: string) => {
+        if (currentSelection && id === currentSelection.id) {
+            clearSelection();
+            return;
+        }
+        handleFileAttachmentRemove(id);
+    }, [clearSelection, currentSelection, handleFileAttachmentRemove]);
     const handleDropPaths = useCallback((paths: string[]) => {
         void addAttachmentsFromPaths(paths);
     }, [addAttachmentsFromPaths]);
