@@ -1,11 +1,13 @@
 import { memo } from "react";
 import type { Attachment } from "../types";
+import { AttachmentList } from "./AttachmentList";
 
 interface ChatInputProps {
     input: string;
     isSending: boolean;
     isDragActive: boolean;
     attachments: Attachment[];
+    onAttachmentRemove: (id: string) => void;
     onInputChange: (value: string) => void;
     onAttach: () => void;
     onSend: () => void;
@@ -17,6 +19,7 @@ export const ChatInput = memo(function ChatInput({
     isSending,
     isDragActive,
     attachments,
+    onAttachmentRemove,
     onInputChange,
     onAttach,
     onSend,
@@ -30,37 +33,12 @@ export const ChatInput = memo(function ChatInput({
                 void onSend();
             }}
         >
-            {attachments.length > 0 ? (
-                <div className="assistant-chat-attachments">
-                    {attachments.map((attachment) => {
-                        const modeLabel =
-                            attachment.mode === "inline" ? "inline" : "link";
-                        const sourceLabel =
-                            attachment.source === "auto" ? "active file" : "";
-                        return (
-                            <div
-                                key={attachment.id}
-                                className={`assistant-chat-attachment is-${attachment.source}`}
-                            >
-                                <div className="assistant-chat-attachment-main">
-                                    <div className="assistant-chat-attachment-name">
-                                        {attachment.name}
-                                    </div>
-                                    <div className="assistant-chat-attachment-meta">
-                                        {attachment.size} · {modeLabel}
-                                        {sourceLabel ? ` · ${sourceLabel}` : ""}
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            ) : null}
+            <AttachmentList attachments={attachments} onRemove={onAttachmentRemove} />
             <div
-                className={`assistant-chat-input-area${isDragActive ? " is-dragging" : ""}`}
+                className={`assistant-chat-input-row${isDragActive ? " is-drop" : ""}`}
             >
                 <button
-                    className="assistant-chat-attach-button"
+                    className="assistant-chat-attach"
                     type="button"
                     onClick={onAttach}
                     disabled={isSending}
@@ -76,7 +54,7 @@ export const ChatInput = memo(function ChatInput({
                     disabled={isSending}
                 />
                 <button
-                    className="assistant-chat-send-button"
+                    className="assistant-chat-send"
                     type="submit"
                     disabled={isSending || (!input.trim() && attachments.length === 0)}
                 >

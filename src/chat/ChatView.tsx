@@ -21,7 +21,6 @@ import {
 import { ChatHeader } from "./components";
 import { ChatMessages } from "./components";
 import { PermissionPrompt } from "./components";
-import { AttachmentList } from "./components";
 import { ChatInput } from "./components";
 import { ChatError } from "./components";
 
@@ -35,6 +34,7 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
         handleAttachmentRemove,
         handleAttachClick,
         buildPromptBlocks,
+        ensureAutoAttachment,
     } = useAttachments({ app, onMessage: appendMessage });
     const { isDragActive, handleDrop, handleDragOver, handleDragLeave, dragHandlers } =
         useDragDrop({ onDropPaths: addAttachmentsFromPaths });
@@ -114,6 +114,17 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
             isActive = false;
         };
     }, [appendMessage, client]);
+
+    useEffect(() => {
+        void ensureAutoAttachment();
+        const ref = app.workspace.on("file-open", () => {
+            void ensureAutoAttachment();
+        });
+
+        return () => {
+            app.workspace.offref(ref);
+        };
+    }, [app, ensureAutoAttachment]);
 
     useEffect(() => {
         const handleSessionUpdate = (notification: SessionNotification) => {
@@ -200,6 +211,7 @@ export const ChatView = ({ client, app }: ChatViewProps) => {
                 isSending={isSending}
                 isDragActive={isDragActive}
                 attachments={attachments}
+                onAttachmentRemove={handleAttachmentRemove}
                 onInputChange={setInput}
                 onAttach={handleAttachClick}
                 onSend={handleSend}

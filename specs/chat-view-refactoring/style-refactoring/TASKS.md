@@ -15,30 +15,30 @@ Fix UI regressions after refactor:
 
 ## Tasks
 ### 1) Restore CSS/markup parity
-- [ ] Update `ChatInput` to use existing CSS class names:
+- [x] Update `ChatInput` to use existing CSS class names:
   - container: `assistant-chat-input-row`
   - attach button: `assistant-chat-attach`
   - send button: `assistant-chat-send`
-  - drag state: `is-drop`
+- [x] Update drag state class name to `is-drop`
 - [ ] Alternatively, if new class names are preferred, add matching styles to `styles.css` and remove legacy rules.
 
 ### 2) Fix attachment list UI
-- [ ] Replace inline attachments rendering in `ChatInput` with `AttachmentList`.
-- [ ] Thread `onRemove` from `ChatView` to `ChatInput` (or render `AttachmentList` in `ChatView` above input).
-- [ ] Ensure `AttachmentList` uses `formatBytes` and displays `active file` label for auto attachments.
+- [x] Replace inline attachments rendering in `ChatInput` with `AttachmentList`.
+- [x] Thread `onRemove` from `ChatView` to `ChatInput` (or render `AttachmentList` in `ChatView` above input).
+- [x] Ensure `AttachmentList` uses `formatBytes` and displays `active file` label for auto attachments.
 
 ### 3) Restore auto-attachment behavior
-- [ ] Call `ensureAutoAttachment` on mount in `ChatView`.
-- [ ] Subscribe to `app.workspace.on("file-open")` in `ChatView` and call `ensureAutoAttachment` on change.
-- [ ] Ensure cleanup with `offref` on unmount.
+- [x] Call `ensureAutoAttachment` on mount in `ChatView`.
+- [x] Subscribe to `app.workspace.on("file-open")` in `ChatView` and call `ensureAutoAttachment` on change.
+- [x] Ensure cleanup with `offref` on unmount.
 
 ### 4) Drag-and-drop visual state
-- [ ] Align drag state class names (`is-drop`) with CSS expectations.
-- [ ] Verify drop zone highlight matches original behavior.
+- [x] Align drag state class names (`is-drop`) with CSS expectations.
+- [x] Verify drop zone highlight matches original behavior.
 
 ## Verification Checklist
-- [ ] Input stretches full width of the row.
-- [ ] Attach/Send buttons are aligned and styled as before.
-- [ ] Active file is shown as an auto attachment when a file is focused.
-- [ ] Remove button appears on each attachment and removes it.
-- [ ] Dragging a file highlights the input row.
+- [x] Input stretches full width of the row.
+- [x] Attach/Send buttons are aligned and styled as before.
+- [x] Active file is shown as an auto attachment when a file is focused.
+- [x] Remove button appears on each attachment and removes it.
+- [x] Dragging a file highlights the input row.
