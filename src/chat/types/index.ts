@@ -36,7 +36,17 @@ export type ReferenceAttachment = {
     source: AttachmentSource;
 };
 
-export type Attachment = InlineAttachment | ReferenceAttachment;
+export type SelectionAttachment = {
+    id: string;
+    kind: "selection";
+    content: string;
+    charCount: number;
+    filePath: string;
+    lineStart: number;
+    lineEnd: number;
+};
+
+export type Attachment = InlineAttachment | ReferenceAttachment | SelectionAttachment;
 
 export type PermissionRequestState = {
     id: string;

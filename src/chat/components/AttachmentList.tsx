@@ -1,6 +1,7 @@
 import { memo } from "react";
 import type { Attachment } from "../types";
 import { formatBytes } from "../utils";
+import { SelectionAttachmentItem } from "./SelectionAttachmentItem";
 
 interface AttachmentListProps {
     attachments: Attachment[];
@@ -19,10 +20,17 @@ export const AttachmentList = memo(function AttachmentList({
         <ul className="assistant-chat-attachments" role="list" aria-label="Attached files">
             {attachments.map((attachment) => (
                 <li key={attachment.id}>
-                    <AttachmentItem
-                        attachment={attachment}
-                        onRemove={onRemove}
-                    />
+                    {attachment.kind === "selection" ? (
+                        <SelectionAttachmentItem
+                            attachment={attachment}
+                            onRemove={onRemove}
+                        />
+                    ) : (
+                        <AttachmentItem
+                            attachment={attachment}
+                            onRemove={onRemove}
+                        />
+                    )}
                 </li>
             ))}
         </ul>
@@ -38,6 +46,10 @@ export const AttachmentItem = memo(function AttachmentItem({
     attachment,
     onRemove,
 }: AttachmentItemProps) {
+    if (attachment.kind === "selection") {
+        return null;
+    }
+
     const modeLabel = attachment.mode === "inline" ? "inline" : "link";
     const sourceLabel = attachment.source === "auto" ? "active file" : "";
 

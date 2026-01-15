@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { App, TFile, Modal } from "obsidian";
 import type { ContentBlock } from "@agentclientprotocol/sdk";
-import type { Attachment, AttachmentSource, ChatMessageRole } from "../types";
+import type { Attachment, AttachmentSource, ChatMessageRole, SelectionAttachment, InlineAttachment, ReferenceAttachment } from "../types";
 
 class FileSelectModal extends Modal {
     constructor(
@@ -44,12 +44,21 @@ import {
     toVaultUri,
 } from "../utils";
 
+function isFileAttachment(attachment: Attachment): attachment is InlineAttachment | ReferenceAttachment {
+    return attachment.kind !== "selection";
+}
+
 interface UseAttachmentsProps {
     app: App;
     onMessage: (role: ChatMessageRole, content: string) => void;
+    selectionAttachment?: SelectionAttachment | null;
 }
 
-export const useAttachments = ({ app, onMessage }: UseAttachmentsProps) => {
+export const useAttachments = ({
+    app,
+    onMessage,
+    selectionAttachment = null
+}: UseAttachmentsProps) => {
     const [attachments, setAttachments] = useState<Attachment[]>([]);
     const attachmentsRef = useRef<Attachment[]>([]);
     const autoAttachSuppressedRef = useRef(false);
@@ -58,6 +67,15 @@ export const useAttachments = ({ app, onMessage }: UseAttachmentsProps) => {
     useEffect(() => {
         attachmentsRef.current = attachments;
     }, [attachments]);
+
+    const allAttachments: Attachment[] = selectionAttachment
+        ? [...attachments, selectionAttachment]
+        : attachments;
+
+    useEffect(() => {
+        console.log("[useAttachments] selectionAttachment changed:", selectionAttachment);
+        console.log("[useAttachments] allAttachments:", allAttachments);
+    }, [selectionAttachment, allAttachments]);
 
     const buildAttachment = useCallback(
         async (file: TFile, source: AttachmentSource): Promise<Attachment> => {
@@ -100,13 +118,14 @@ export const useAttachments = ({ app, onMessage }: UseAttachmentsProps) => {
 
     const addAttachmentFromFile = useCallback(
         async (file: TFile, source: AttachmentSource) => {
-            if (attachmentsRef.current.some((attachment) => attachment.path === file.path)) {
+            if (attachmentsRef.current.some((attachment) => isFileAttachment(attachment) && attachment.path === file.path)) {
                 return;
             }
 
             const attachment = await buildAttachment(file, source);
             setAttachments((prev) => {
-                if (prev.some((item) => item.path === attachment.path)) {
+                const hasSameFile = prev.some((item) => isFileAttachment(item) && item.path === (attachment as InlineAttachment | ReferenceAttachment).path);
+                if (hasSameFile) {
                     return prev;
                 }
                 return [...prev, attachment];
@@ -153,15 +172,15 @@ export const useAttachments = ({ app, onMessage }: UseAttachmentsProps) => {
 
         const file = app.workspace.getActiveFile();
         if (!file) {
-            setAttachments((prev) => prev.filter((item) => item.source !== "auto"));
+            setAttachments((prev) => prev.filter((item) => isFileAttachment(item) && item.source !== "auto"));
             return;
         }
 
         const existingAuto = attachmentsRef.current.find(
-            (attachment) => attachment.source === "auto"
-        );
+            (attachment) => isFileAttachment(attachment) && attachment.source === "auto"
+        ) as (InlineAttachment | ReferenceAttachment) | undefined;
         const hasManualForActive = attachmentsRef.current.some(
-            (attachment) =>
+            (attachment) => isFileAttachment(attachment) &&
                 attachment.source !== "auto" && attachment.path === file.path
         );
         if (existingAuto?.path === file.path) {
@@ -169,7 +188,7 @@ export const useAttachments = ({ app, onMessage }: UseAttachmentsProps) => {
         }
         if (hasManualForActive) {
             if (existingAuto) {
-                setAttachments((prev) => prev.filter((item) => item.source !== "auto"));
+                setAttachments((prev) => prev.filter((item) => isFileAttachment(item) && item.source !== "auto"));
             }
             return;
         }
@@ -181,20 +200,21 @@ export const useAttachments = ({ app, onMessage }: UseAttachmentsProps) => {
         }
 
         const activeFile = app.workspace.getActiveFile();
-        if (!activeFile || activeFile.path !== attachment.path) {
+        if (!activeFile || activeFile.path !== (attachment as InlineAttachment | ReferenceAttachment).path) {
             return;
         }
 
         const hasManualForActiveNow = attachmentsRef.current.some(
-            (item) => item.source !== "auto" && item.path === attachment.path
+            (item) => isFileAttachment(item) && item.source !== "auto" && item.path === (attachment as InlineAttachment | ReferenceAttachment).path
         );
         if (hasManualForActiveNow) {
             return;
         }
 
         setAttachments((prev) => {
-            const withoutAuto = prev.filter((item) => item.source !== "auto");
-            if (withoutAuto.some((item) => item.path === attachment.path)) {
+            const withoutAuto = prev.filter((item) => isFileAttachment(item) && item.source !== "auto");
+            const attachmentPath = (attachment as InlineAttachment | ReferenceAttachment).path;
+            if (withoutAuto.some((item) => isFileAttachment(item) && item.path === attachmentPath)) {
                 return withoutAuto;
             }
             return [...withoutAuto, attachment];
@@ -204,7 +224,7 @@ export const useAttachments = ({ app, onMessage }: UseAttachmentsProps) => {
     const handleAttachmentRemove = useCallback((id: string) => {
         setAttachments((prev) => {
             const target = prev.find((attachment) => attachment.id === id);
-            if (target?.source === "auto") {
+            if (target && isFileAttachment(target) && target.source === "auto") {
                 autoAttachSuppressedRef.current = true;
             }
             return prev.filter((attachment) => attachment.id !== id);
@@ -230,6 +250,18 @@ export const useAttachments = ({ app, onMessage }: UseAttachmentsProps) => {
             }
 
             for (const attachment of currentAttachments) {
+                if (attachment.kind === "selection") {
+                    const uri = `selection://${attachment.filePath}#L${attachment.lineStart}-${attachment.lineEnd}`;
+                    blocks.push({
+                        type: "resource",
+                        resource: {
+                            uri,
+                            text: attachment.content,
+                        },
+                    });
+                    continue;
+                }
+
                 const uri = toVaultUri(attachment.path);
 
                 if (attachment.mode === "inline") {
@@ -257,7 +289,7 @@ export const useAttachments = ({ app, onMessage }: UseAttachmentsProps) => {
     );
 
     return {
-        attachments,
+        attachments: allAttachments,
         addAttachmentFromFile,
         addAttachmentsFromPaths,
         ensureAutoAttachment,

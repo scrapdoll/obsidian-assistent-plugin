@@ -370,3 +370,13 @@ If your plugin does not need CSS, delete this file.
 	cursor: not-allowed;
 	opacity: 0.6;
 }
+
+.assistant-chat-attachment.is-selection {
+	border-left: 3px solid var(--color-accent);
+	background-color: rgba(var(--color-accent-rgb), 0.05);
+}
+
+.assistant-chat-attachment.is-selection .assistant-chat-attachment-name {
+	font-weight: 600;
+	color: var(--color-accent);
+}
