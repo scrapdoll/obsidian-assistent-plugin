@@ -1,26 +1,26 @@
 # Chat View Refactoring Tasks
 
 ## Phase 1: Foundation (Structure + Types + Utils)
-- [ ] Create folder structure under `src/chat/` (types, constants, utils, hooks, components)
-- [ ] Extract shared types to `src/chat/types/index.ts`
-- [ ] Extract constants to `src/chat/constants/`
-- [ ] Move pure utility functions to `src/chat/utils/` and update imports
-- [ ] Add minimal type guards/validators for unsafe casts
+- [x] Create folder structure under `src/chat/` (types, constants, utils, hooks, components)
+- [x] Extract shared types to `src/chat/types/index.ts`
+- [x] Extract constants to `src/chat/constants/`
+- [x] Move pure utility functions to `src/chat/utils/` and update imports
+- [x] Add minimal type guards/validators for unsafe casts
 
 ## Phase 2: Hooks (State & Side Effects)
-- [ ] Implement `useMessages` (append, appendAssistantText, clear)
-- [ ] Implement `usePermissions` (queue handling, resolve/cancel, focus restore)
-- [ ] Implement `useAttachments` (manual + auto attach, read file contents)
-- [ ] Implement `useDragDrop` (drag state + handlers)
-- [ ] Wire hooks in `ChatView` and remove duplicate refs/state
+- [x] Implement `useMessages` (append, appendAssistantText, clear)
+- [x] Implement `usePermissions` (queue handling, resolve/cancel, focus restore)
+- [x] Implement `useAttachments` (manual + auto attach, read file contents)
+- [x] Implement `useDragDrop` (drag state + handlers)
+- [x] Wire hooks in `ChatView` and remove duplicate refs/state
 
 ## Phase 3: Components (UI Split)
-- [ ] Extract `ChatHeader`
-- [ ] Extract `ChatMessages` + `ChatMessage`
-- [ ] Extract `PermissionPrompt`
-- [ ] Extract `AttachmentList` + `AttachmentItem`
-- [ ] Extract `ChatInput` + `ChatError`
-- [ ] Keep `ChatView` as orchestrator only
+- [x] Extract `ChatHeader`
+- [x] Extract `ChatMessages` + `ChatMessage`
+- [x] Extract `PermissionPrompt`
+- [x] Extract `AttachmentList` + `AttachmentItem`
+- [x] Extract `ChatInput` + `ChatError`
+- [x] Keep `ChatView` as orchestrator only
 
 ## Phase 4: Performance & Stability
 - [ ] Wrap handlers with `useCallback` where passed to child components
